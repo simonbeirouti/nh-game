@@ -19,13 +19,20 @@ export function supabaseServiceRoleKey(): string {
 }
 
 export function appUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL ?? "http://127.0.0.1:3000").replace(
-    /\/$/,
-    "",
-  )
+  const vercelUrl =
+    process.env.VERCEL_ENV === "preview"
+      ? (process.env.VERCEL_BRANCH_URL || process.env.VERCEL_URL)
+      : (process.env.VERCEL_PROJECT_PRODUCTION_URL ||
+        process.env.VERCEL_BRANCH_URL ||
+        process.env.VERCEL_URL)
+
+  const url =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (vercelUrl ? `https://${vercelUrl}` : "http://127.0.0.1:3000")
+
+  return url.replace(/\/+$/, "")
 }
 
 export function adminEmail(): string {
   return (process.env.ADMIN_EMAIL ?? "hello@simonbeirouti.com").toLowerCase()
 }
-
