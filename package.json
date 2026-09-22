@@ -16,7 +16,14 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:db": "supabase test db",
-    "db:reset": "./scripts/reset-db.sh"
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:status": "supabase status",
+    "db:reset": "./scripts/reset-db.sh",
+    "db:pull": "./scripts/supa db pull --linked",
+    "db:push:check": "./scripts/supa db push --linked --dry-run",
+    "db:push": "./scripts/supa db push --linked",
+    "db:migrations": "./scripts/supa migration list --linked"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

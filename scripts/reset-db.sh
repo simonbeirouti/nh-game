@@ -4,7 +4,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-supabase db reset --local
+pnpm exec supabase db reset --local
 
 echo
 echo "Local database reset with 20 users, 4 active games, and 2 completed games."
