@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from "next"
+import type { Metadata } from "next"
 
 import "./globals.css"
 import { ServiceWorkerRegistration } from "@/components/service-worker-registration"
@@ -16,13 +16,6 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
   },
   icons: { apple: "/apple-touch-icon.svg" },
-}
-
-export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#252525" },
-  ],
 }
 
 export default function RootLayout({
