@@ -12,7 +12,7 @@ const EMAIL_OTP_TYPES = new Set<EmailOtpType>([
   "email",
   "signup",
   "invite",
-  "magiclink",
+  "recovery",
 ])
 
 function errorDestination(origin: string, next: string, error: string) {

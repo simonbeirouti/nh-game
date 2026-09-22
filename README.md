@@ -1,6 +1,6 @@
-# NH Games
+# CoLabs Games
 
-NH Games is a private tournament manager. It supports a shared passwordless
+CoLabs Games is a private tournament manager. It supports a shared passwordless
 email login, invite-only game membership, user-created single-elimination games,
 reproducible secure draws, winner progression, archiving, and opt-in push
 notifications. Administrators are assigned through the locked `user_roles`
@@ -40,10 +40,10 @@ Reset the local database and load the visual development fixtures with:
 pnpm db:reset
 ```
 
-The seed creates 20 users, four active games, and two completed games. Request a
-local magic link for `hello@simonbeirouti.com` to see all six games as the seeded
-administrator. Other seeded accounts use `player02@example.com` through
-`player20@example.com`.
+The seed creates 20 users, four active games, and two completed games. Use the
+forgot-password flow for `hello@simonbeirouti.com` to set a local password and
+see all six games as the seeded administrator. Other seeded accounts use
+`player02@example.com` through `player20@example.com`.
 
 For realistic service-worker and push testing, use `pnpm dev:https` and set
 `NEXT_PUBLIC_APP_URL=https://localhost:3000`.

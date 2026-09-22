@@ -26,14 +26,31 @@ test("renders the shared sign-in and account creation page", async ({
 }) => {
   await page.goto("/auth")
 
-  await expect(page.getByRole("heading", { name: "NH Games" })).toBeVisible()
-  await expect(page.getByLabel("Email")).toBeVisible()
   await expect(
-    page.getByText("Sign in or create an account with a secure email link.")
+    page.getByRole("heading", { name: "Welcome back" })
   ).toBeVisible()
   await expect(
-    page.getByRole("button", { name: "Email sign-in link" })
+    page.getByRole("link", { name: "CoLabs Games" })
   ).toBeVisible()
+  await expect(page.getByRole("textbox", { name: "Email" })).toBeVisible()
+  await expect(page.getByLabel("Password")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Sign up" })).toBeVisible()
+
+  await page.getByRole("button", { name: "Forgot your password?" }).click()
+  await expect(
+    page.getByRole("heading", { name: "Reset your password" })
+  ).toBeVisible()
+  await expect(
+    page.getByRole("button", { name: "Send reset link" })
+  ).toBeVisible()
+
+  await page.getByRole("button", { name: "Sign in" }).click()
+  await page.getByRole("button", { name: "Sign up" }).click()
+  await expect(
+    page.getByRole("heading", { name: "Create an account" })
+  ).toBeVisible()
+  await expect(page.getByLabel("Confirm password")).toBeVisible()
 })
 
 test("publishes an installable manifest and offline fallback", async ({
@@ -42,7 +59,8 @@ test("publishes an installable manifest and offline fallback", async ({
   const manifest = await request.get("/manifest.webmanifest")
   expect(manifest.ok()).toBeTruthy()
   await expect(manifest.json()).resolves.toMatchObject({
-    name: "NH Games",
+    name: "CoLabs Games",
+    short_name: "CoLabs Games",
     display: "standalone",
     start_url: "/dashboard",
   })

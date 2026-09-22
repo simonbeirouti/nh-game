@@ -3,7 +3,9 @@ import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
 import { ArrowRightIcon, TrophyIcon } from "lucide-react"
 
+import { ToastNotification } from "@/components/action-feedback"
 import { CreateGameOverlay } from "@/components/create-game-overlay"
+import { GameStatusBadge } from "@/components/game-status-badge"
 import { Badge } from "@/components/ui/badge"
 import {
   Card,
@@ -28,14 +30,6 @@ import { createClient } from "@/lib/supabase/server"
 import type { GameStatus } from "@/lib/tournament/types"
 
 export const metadata: Metadata = { title: "Games" }
-
-const statusLabel: Record<GameStatus, string> = {
-  open: "Open",
-  full: "Full",
-  drafted: "In progress",
-  completed: "Completed",
-  archived: "Archived",
-}
 
 type Game = {
   id: string
@@ -78,19 +72,19 @@ function GameGrid({
           <Link
             key={game.id}
             href={`/games/${game.id}`}
-            className="rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            className="h-full rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
-            <Card className="h-full transition-shadow hover:shadow-md">
-              <CardHeader>
+            <Card className="h-full min-h-56 transition-shadow hover:shadow-md">
+              <CardHeader className="min-h-20">
                 <CardTitle>{game.name}</CardTitle>
                 <CardDescription>
                   {game.description || "Single-elimination tournament"}
                 </CardDescription>
                 <CardAction>
-                  <Badge variant="secondary">{statusLabel[game.status]}</Badge>
+                  <GameStatusBadge status={game.status} />
                 </CardAction>
               </CardHeader>
-              <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
+              <CardContent className="flex flex-1 flex-col gap-2 text-sm text-muted-foreground">
                 <p>
                   {participantCount}
                   {game.max_participants
@@ -117,7 +111,12 @@ function GameGrid({
   )
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ password?: string }>
+}) {
+  const { password } = await searchParams
   const viewer = (await getCurrentViewer())!
   const supabase = await createClient()
   const gamesClient = viewer.isAdmin ? createAdminClient() : supabase
@@ -140,12 +139,19 @@ export default async function DashboardPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-8 p-4 md:p-8 lg:px-12">
-      <div className="flex items-start justify-between gap-4">
+      {password === "updated" ? (
+        <ToastNotification
+          title="Password updated"
+          description="Your new password is ready to use."
+          type="success"
+        />
+      ) : null}
+      <div className="flex items-center justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h1 className="text-3xl font-semibold tracking-tight">Games</h1>
           <p className="text-muted-foreground">
             {viewer.isAdmin
-              ? "All tournaments across NH Games."
+              ? "All tournaments across CoLabs Games."
               : "Tournaments you organize or have joined."}
           </p>
         </div>
@@ -153,7 +159,7 @@ export default async function DashboardPage() {
       </div>
 
       <Tabs defaultValue="active">
-        <TabsList aria-label="Game status">
+        <TabsList className="w-full md:w-fit" aria-label="Game status">
           <TabsTrigger value="active">
             Active <Badge variant="secondary">{activeGames.length}</Badge>
           </TabsTrigger>

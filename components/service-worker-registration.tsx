@@ -21,7 +21,11 @@ export function ServiceWorkerRegistration() {
               .then((keys) =>
                 Promise.all(
                   keys
-                    .filter((key) => key.startsWith("nh-games-static-"))
+                    .filter(
+                      (key) =>
+                        key.startsWith("colabs-games-static-") ||
+                        key.startsWith("nh-games-static-")
+                    )
                     .map((key) => caches.delete(key))
                 )
               )

@@ -6,12 +6,7 @@ export type TournamentType =
   | "free_for_all"
   | "leaderboard"
 
-export type GameStatus =
-  | "open"
-  | "full"
-  | "drafted"
-  | "completed"
-  | "archived"
+export type GameStatus = "open" | "full" | "drafted" | "completed" | "archived"
 
 export type MatchStatus = "pending" | "ready" | "complete" | "bye"
 
@@ -28,6 +23,8 @@ export interface TournamentMatch {
   participantAId: string | null
   participantBId: string | null
   winnerId: string | null
+  participantAScore?: number | null
+  participantBScore?: number | null
   status: MatchStatus
   nextMatchId: string | null
   nextSlot: "a" | "b" | null
@@ -62,4 +59,3 @@ export interface TournamentFormat<TState, TDisplay> {
   isComplete(state: TState): boolean
   getDisplayData(state: TState): TDisplay
 }
-

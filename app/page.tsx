@@ -61,7 +61,7 @@ export default async function HomePage() {
             <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <TrophyIcon aria-hidden="true" />
             </span>
-            NH Games
+            CoLabs Games
           </Link>
 
           {user ? (

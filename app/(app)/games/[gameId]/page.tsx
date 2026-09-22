@@ -1,19 +1,19 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { format } from "date-fns"
-import { ArrowLeftIcon, CrownIcon, UsersIcon } from "lucide-react"
+import { ArrowLeftIcon, CrownIcon, Trash2Icon, UsersIcon } from "lucide-react"
 
 import { leaveOrRemoveParticipant } from "@/app/actions/games"
+import { ToastNotification } from "@/components/action-feedback"
 import { Bracket } from "@/components/bracket"
 import { CopyInviteButton } from "@/components/copy-invite-button"
 import { GameControls } from "@/components/game-controls"
+import { GameParticipantsDrawer } from "@/components/game-participants-drawer"
+import { GameStatusBadge } from "@/components/game-status-badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -25,37 +25,98 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getCurrentViewer } from "@/lib/auth"
 import { appUrl } from "@/lib/env"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { SingleEliminationFormat } from "@/lib/tournament/single-elimination"
 import type { GameStatus, TournamentMatch } from "@/lib/tournament/types"
 
 export const metadata: Metadata = { title: "Game" }
 
-const statusLabel: Record<GameStatus, string> = {
-  open: "Open",
-  full: "Full",
-  drafted: "In progress",
-  completed: "Completed",
-  archived: "Archived",
+function ParticipantsList({
+  participants,
+  gameId,
+  gameStatus,
+  currentUserId,
+  canManage,
+  names,
+  avatars,
+}: {
+  participants: Array<{ user_id: string; seed_position: number | null }>
+  gameId: string
+  gameStatus: GameStatus
+  currentUserId: string
+  canManage: boolean
+  names: Record<string, string>
+  avatars: Record<string, string | null>
+}) {
+  if (!participants.length) {
+    return (
+      <Empty>
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <UsersIcon />
+          </EmptyMedia>
+          <EmptyTitle>No participants</EmptyTitle>
+          <EmptyDescription>
+            Share the private invite link to fill the bracket.
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    )
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border">
+      {participants.map((participant) => (
+        <div
+          key={participant.user_id}
+          className="flex min-h-14 items-center gap-3 border-b px-3 py-2 last:border-b-0"
+        >
+          <Avatar>
+            <AvatarImage
+              src={avatars[participant.user_id] ?? undefined}
+              alt=""
+            />
+            <AvatarFallback>
+              {(names[participant.user_id] ?? "P").slice(0, 1).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <span className="min-w-0 flex-1 truncate font-medium">
+            {names[participant.user_id] ?? "Player"}
+            {participant.user_id === currentUserId ? " (you)" : ""}
+          </span>
+          {["open", "full"].includes(gameStatus) &&
+          (canManage || participant.user_id === currentUserId) ? (
+            <form action={leaveOrRemoveParticipant}>
+              <input type="hidden" name="gameId" value={gameId} />
+              <input type="hidden" name="userId" value={participant.user_id} />
+              <Button
+                type="submit"
+                size="icon-sm"
+                variant="destructive"
+                aria-label={`Remove ${names[participant.user_id] ?? "player"}`}
+              >
+                <Trash2Icon />
+              </Button>
+            </form>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export default async function GamePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ gameId: string }>
+  searchParams: Promise<{ joined?: string }>
 }) {
   const { gameId } = await params
+  const { joined } = await searchParams
   const viewer = (await getCurrentViewer())!
   const user = viewer.user
   const supabase = await createClient()
@@ -69,27 +130,21 @@ export default async function GamePage({
     .maybeSingle()
   if (!game) notFound()
 
-  const [{ data: participants }, { data: matches }, { data: randomization }] =
-    await Promise.all([
-      dataClient
-        .from("game_participants")
-        .select("user_id,seed_position,joined_at")
-        .eq("game_id", gameId)
-        .order("joined_at"),
-      dataClient
-        .from("tournament_matches")
-        .select(
-          "id,round,slot,participant_a_id,participant_b_id,winner_id,status,next_match_id,next_slot"
-        )
-        .eq("game_id", gameId)
-        .order("round")
-        .order("slot"),
-      dataClient
-        .from("randomization_events")
-        .select("order_hash,created_at")
-        .eq("game_id", gameId)
-        .maybeSingle(),
-    ])
+  const [{ data: participants }, { data: matches }] = await Promise.all([
+    dataClient
+      .from("game_participants")
+      .select("user_id,seed_position,joined_at")
+      .eq("game_id", gameId)
+      .order("joined_at"),
+    dataClient
+      .from("tournament_matches")
+      .select(
+        "id,round,slot,participant_a_id,participant_b_id,winner_id,participant_a_score,participant_b_score,status,next_match_id,next_slot"
+      )
+      .eq("game_id", gameId)
+      .order("round")
+      .order("slot"),
+  ])
   const profileIds =
     participants?.map((participant) => participant.user_id) ?? []
   const { data: profiles } = profileIds.length
@@ -103,6 +158,12 @@ export default async function GamePage({
   )
   const avatars = Object.fromEntries(
     (profiles ?? []).map((profile) => [profile.id, profile.avatar_url])
+  )
+  const seeds = Object.fromEntries(
+    (participants ?? []).map((participant) => [
+      participant.user_id,
+      participant.seed_position,
+    ])
   )
   const isCreator = game.created_by === user.id
   const canManage = isCreator || viewer.isAdmin
@@ -125,47 +186,84 @@ export default async function GamePage({
     participantAId: match.participant_a_id,
     participantBId: match.participant_b_id,
     winnerId: match.winner_id,
+    participantAScore: match.participant_a_score,
+    participantBScore: match.participant_b_score,
     status: match.status,
     nextMatchId: match.next_match_id,
     nextSlot: match.next_slot,
   }))
+  const isPreview = normalizedMatches.length === 0
+  let previewIndex = 0
+  const previewFormat = new SingleEliminationFormat(
+    () => `preview-${gameId}-${++previewIndex}`
+  )
+  const previewMatches: TournamentMatch[] =
+    profileIds.length >= 2
+      ? previewFormat.initialize(
+          profileIds.map((userId, index) => ({ userId, seed: index + 1 }))
+        ).matches
+      : [
+          {
+            id: `preview-${gameId}-1`,
+            round: 1,
+            slot: 1,
+            participantAId: profileIds[0] ?? null,
+            participantBId: null,
+            winnerId: null,
+            status: "pending",
+            nextMatchId: null,
+            nextSlot: null,
+          },
+        ]
+  const displayMatches = isPreview ? previewMatches : normalizedMatches
+  const displaySeeds = isPreview
+    ? Object.fromEntries(profileIds.map((userId, index) => [userId, index + 1]))
+    : seeds
   const championId = normalizedMatches.find(
     (match) => match.nextMatchId === null && match.status === "complete"
   )?.winnerId
 
   return (
-    <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-10 px-4 py-6 md:px-8 md:py-10 lg:px-12">
-      <Link
-        href="/dashboard"
-        className={buttonVariants({ variant: "ghost", className: "w-fit" })}
-      >
-        <ArrowLeftIcon data-icon="inline-start" />
-        Back to games
-      </Link>
-      <div className="flex flex-col justify-between gap-6 md:flex-row md:items-start">
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {game.name}
-            </h1>
-            <Badge variant="secondary">
-              {statusLabel[game.status as GameStatus]}
-            </Badge>
-          </div>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            {game.description || "Single-elimination tournament"}
-          </p>
-          {game.randomized_at ? (
-            <p className="text-xs text-muted-foreground">
-              Draw locked {format(new Date(game.randomized_at), "PPp")}
-              {randomization
-                ? ` · verification ${randomization.order_hash.slice(0, 10)}`
-                : ""}
-            </p>
+    <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 py-6 md:h-[calc(100svh-3.5rem)] md:overflow-hidden md:px-8 md:py-8 lg:px-12">
+      {joined === "1" ? (
+        <ToastNotification
+          title="Game joined"
+          description="You have been added to the tournament."
+          type="success"
+        />
+      ) : null}
+      <header className="flex flex-wrap items-center gap-3">
+        <Link
+          href="/dashboard"
+          aria-label="Back to games"
+          className={buttonVariants({
+            variant: "ghost",
+            size: "icon",
+            className: "-ml-2 md:w-auto md:px-2.5",
+          })}
+        >
+          <ArrowLeftIcon data-icon="inline-start" />
+          <span className="hidden md:inline">Back to games</span>
+        </Link>
+        <h1 className="text-xl font-semibold tracking-tight md:text-2xl">
+          {game.name}
+        </h1>
+        <GameStatusBadge status={game.status as GameStatus} />
+        <div className="grid w-full auto-cols-fr grid-flow-col gap-2 md:ml-auto md:flex md:w-auto md:items-center">
+          {inviteUrl ? (
+            <CopyInviteButton className="w-full md:w-auto" url={inviteUrl} />
           ) : null}
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {inviteUrl ? <CopyInviteButton url={inviteUrl} /> : null}
+          <GameParticipantsDrawer participantCount={profileIds.length}>
+            <ParticipantsList
+              participants={participants ?? []}
+              gameId={gameId}
+              gameStatus={game.status as GameStatus}
+              currentUserId={user.id}
+              canManage={canManage}
+              names={names}
+              avatars={avatars}
+            />
+          </GameParticipantsDrawer>
           {canManage ? (
             <GameControls
               gameId={gameId}
@@ -176,183 +274,44 @@ export default async function GamePage({
                 ["open", "full"].includes(game.status) && profileIds.length >= 2
               }
               canArchive={game.status !== "archived"}
+              className="w-full md:w-auto"
             />
           ) : null}
         </div>
-      </div>
-
-      <Tabs defaultValue="draft">
-        <TabsList aria-label="Game details">
-          <TabsTrigger value="draft">Draft</TabsTrigger>
-          <TabsTrigger value="bracket">Bracket</TabsTrigger>
-        </TabsList>
-        <TabsContent value="draft" className="pt-4">
-          <section
-            className="flex flex-col gap-4"
-            aria-labelledby="participants-heading"
-          >
-            <div>
-              <h2 id="participants-heading" className="text-lg font-medium">
-                Draft and participants
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                {profileIds.length}
-                {game.max_participants
-                  ? ` of ${game.max_participants}`
-                  : ""}{" "}
-                joined.
-              </p>
-            </div>
+      </header>
+      <div className="flex min-h-0 flex-1">
+        <section
+          className="flex min-h-0 min-w-0 flex-1 flex-col gap-3"
+          aria-labelledby="bracket-heading"
+        >
+          {championId ? (
             <Card>
-              <CardContent>
-                {participants?.length ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Seed</TableHead>
-                        <TableHead>Player</TableHead>
-                        <TableHead className="text-right">Action</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {participants
-                        .toSorted(
-                          (a, b) =>
-                            (a.seed_position ?? 999) - (b.seed_position ?? 999)
-                        )
-                        .map((participant) => (
-                          <TableRow
-                            key={participant.user_id}
-                            data-state={
-                              participant.user_id === user.id
-                                ? "selected"
-                                : undefined
-                            }
-                          >
-                            <TableCell>
-                              {participant.seed_position
-                                ? `#${participant.seed_position}`
-                                : "—"}
-                            </TableCell>
-                            <TableCell>
-                              <span className="flex items-center gap-2 font-medium">
-                                <Avatar size="sm">
-                                  <AvatarImage
-                                    src={
-                                      avatars[participant.user_id] ?? undefined
-                                    }
-                                    alt=""
-                                  />
-                                  <AvatarFallback>
-                                    {(names[participant.user_id] ?? "P")
-                                      .slice(0, 1)
-                                      .toUpperCase()}
-                                  </AvatarFallback>
-                                </Avatar>
-                                {names[participant.user_id] ?? "Player"}
-                                {participant.user_id === user.id
-                                  ? " (you)"
-                                  : ""}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {["open", "full"].includes(game.status) &&
-                              (canManage || participant.user_id === user.id) ? (
-                                <form action={leaveOrRemoveParticipant}>
-                                  <input
-                                    type="hidden"
-                                    name="gameId"
-                                    value={gameId}
-                                  />
-                                  <input
-                                    type="hidden"
-                                    name="userId"
-                                    value={participant.user_id}
-                                  />
-                                  <Button
-                                    type="submit"
-                                    size="sm"
-                                    variant="ghost"
-                                  >
-                                    {participant.user_id === user.id
-                                      ? "Leave"
-                                      : "Remove"}
-                                  </Button>
-                                </form>
-                              ) : null}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <Empty>
-                    <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <UsersIcon />
-                      </EmptyMedia>
-                      <EmptyTitle>No participants</EmptyTitle>
-                      <EmptyDescription>
-                        Share the private invite link to fill the bracket.
-                      </EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
-                )}
-              </CardContent>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CrownIcon aria-hidden="true" /> Champion
+                </CardTitle>
+                <CardDescription>
+                  {names[championId] ?? "Winner"} won the tournament.
+                </CardDescription>
+              </CardHeader>
             </Card>
-          </section>
-        </TabsContent>
-        <TabsContent value="bracket" className="pt-4">
-          <section
-            className="flex flex-col gap-4"
-            aria-labelledby="bracket-heading"
-          >
-            <div>
-              <h2 id="bracket-heading" className="text-lg font-medium">
-                Bracket
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                See every match and who each player is up against.
-              </p>
-            </div>
-            {championId ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <CrownIcon aria-hidden="true" /> Champion
-                  </CardTitle>
-                  <CardDescription>
-                    {names[championId] ?? "Winner"} won the tournament.
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            ) : null}
-            {normalizedMatches.length ? (
-              <Bracket
-                gameId={gameId}
-                matches={normalizedMatches}
-                names={names}
-                avatars={avatars}
-                currentUserId={user.id}
-                canManage={canManage && game.status === "drafted"}
-              />
-            ) : (
-              <Empty>
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <CrownIcon />
-                  </EmptyMedia>
-                  <EmptyTitle>Draw not locked</EmptyTitle>
-                  <EmptyDescription>
-                    The organizer will generate the bracket when everyone has
-                    joined.
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            )}
-          </section>
-        </TabsContent>
-      </Tabs>
+          ) : null}
+          <Bracket
+            gameId={gameId}
+            matches={displayMatches}
+            names={names}
+            avatars={avatars}
+            seeds={displaySeeds}
+            currentUserId={user.id}
+            canManage={
+              !isPreview &&
+              canManage &&
+              ["drafted", "completed"].includes(game.status)
+            }
+            preview={isPreview}
+          />
+        </section>
+      </div>
     </main>
   )
 }

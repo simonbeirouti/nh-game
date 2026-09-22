@@ -4,6 +4,7 @@ import { notFound } from "next/navigation"
 import { TrophyIcon, UsersIcon } from "lucide-react"
 
 import { joinAuthenticatedGame } from "@/app/actions/auth"
+import { ToastNotification } from "@/components/action-feedback"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -53,7 +54,7 @@ export default async function JoinGamePage({
           <CardTitle>{game.name}</CardTitle>
           <CardDescription>
             {game.description ||
-              "You have been invited to an NH Games tournament."}
+              "You have been invited to a CoLabs Games tournament."}
           </CardDescription>
           <div className="mt-2 flex items-center gap-2">
             <Badge variant={accepting ? "secondary" : "outline"}>
@@ -68,7 +69,11 @@ export default async function JoinGamePage({
         </CardHeader>
         <CardContent>
           {queryError ? (
-            <p className="mb-4 text-sm text-destructive">{queryError}</p>
+            <ToastNotification
+              title="Could not join game"
+              description={queryError}
+              type="error"
+            />
           ) : null}
           {!accepting ? (
             <p className="text-sm text-muted-foreground">

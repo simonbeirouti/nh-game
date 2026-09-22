@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { PlusIcon } from "lucide-react"
 
 import { createGame } from "@/app/actions/games"
+import { ActionFeedback } from "@/components/action-feedback"
 import { Button } from "@/components/ui/button"
 import {
   Field,
@@ -93,9 +94,11 @@ export function CreateGameForm() {
             </Field>
           </FieldLabel>
         </FieldGroup>
-        {state.message && !state.ok ? (
-          <FieldError>{state.message}</FieldError>
-        ) : null}
+        <ActionFeedback
+          state={state}
+          successTitle="Game created"
+          errorTitle="Could not create game"
+        />
         <Field>
           <Button type="submit" disabled={pending}>
             {pending ? (

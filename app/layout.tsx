@@ -7,10 +7,14 @@ import { Toaster } from "@/components/ui/toast"
 import { TooltipProvider } from "@/components/ui/tooltip"
 
 export const metadata: Metadata = {
-  title: { default: "NH Games", template: "%s · NH Games" },
+  title: { default: "CoLabs Games", template: "%s · CoLabs Games" },
   description: "Private, trustworthy coworker tournaments.",
-  applicationName: "NH Games",
-  appleWebApp: { capable: true, title: "NH Games", statusBarStyle: "default" },
+  applicationName: "CoLabs Games",
+  appleWebApp: {
+    capable: true,
+    title: "CoLabs Games",
+    statusBarStyle: "default",
+  },
   icons: { apple: "/apple-touch-icon.svg" },
 }
 
@@ -31,10 +35,9 @@ export default function RootLayout({
       <body>
         <ThemeProvider>
           <TooltipProvider>
-            <Toaster>
-              {children}
-              <ServiceWorkerRegistration />
-            </Toaster>
+            {children}
+            <ServiceWorkerRegistration />
+            <Toaster />
           </TooltipProvider>
         </ThemeProvider>
       </body>

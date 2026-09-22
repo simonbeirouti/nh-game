@@ -8,6 +8,7 @@ import {
   useTransition,
 } from "react"
 import { useRouter } from "next/navigation"
+import { cn } from "cn"
 import {
   BellIcon,
   LogOutIcon,
@@ -23,6 +24,7 @@ import {
   updateProfile,
   updateProfileAvatar,
 } from "@/app/actions/profile"
+import { ActionFeedback } from "@/components/action-feedback"
 import { PushNotifications } from "@/components/push-notifications"
 import {
   AlertDialog,
@@ -45,6 +47,15 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer"
 import { Separator } from "@/components/ui/separator"
 import {
   Sheet,
@@ -57,6 +68,7 @@ import {
 } from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
+import { useIsMobile } from "@/hooks/use-mobile"
 import type { ActionState } from "@/lib/action-state"
 
 const initialState: ActionState = { ok: false, message: "" }
@@ -283,6 +295,7 @@ export function ProfileSheet({
   canEnableNotifications: boolean
 }) {
   const router = useRouter()
+  const isMobile = useIsMobile()
   const [fullName, setFullName] = useState(userName)
   const [state, action, pending] = useActionState(updateProfile, initialState)
 
@@ -290,9 +303,17 @@ export function ProfileSheet({
     if (state.ok) router.refresh()
   }, [router, state.ok])
 
+  const Panel = isMobile ? Drawer : Sheet
+  const PanelTrigger = isMobile ? DrawerTrigger : SheetTrigger
+  const PanelContent = isMobile ? DrawerContent : SheetContent
+  const PanelHeader = isMobile ? DrawerHeader : SheetHeader
+  const PanelTitle = isMobile ? DrawerTitle : SheetTitle
+  const PanelDescription = isMobile ? DrawerDescription : SheetDescription
+  const PanelFooter = isMobile ? DrawerFooter : SheetFooter
+
   return (
-    <Sheet>
-      <SheetTrigger
+    <Panel {...(isMobile ? { showSwipeHandle: true } : {})}>
+      <PanelTrigger
         render={
           <Button
             variant="ghost"
@@ -307,104 +328,107 @@ export function ProfileSheet({
             {initials(userName) || <UserRoundIcon aria-hidden="true" />}
           </AvatarFallback>
         </Avatar>
-      </SheetTrigger>
-      <SheetContent className="overflow-y-auto sm:max-w-md">
-        <SheetHeader>
-          <SheetTitle>Profile</SheetTitle>
-          <SheetDescription>
+      </PanelTrigger>
+      <PanelContent
+        className={cn(
+          "flex flex-col overflow-hidden",
+          isMobile ? "max-h-[92dvh]" : "h-full sm:max-w-md"
+        )}
+      >
+        <PanelHeader>
+          <PanelTitle>Profile</PanelTitle>
+          <PanelDescription>
             Manage how you appear in games and your device notifications.
-          </SheetDescription>
-        </SheetHeader>
-
-        <div className="flex flex-col gap-6 px-4">
-          <form action={action}>
-            <FieldGroup>
-              <ProfileImageEditor userName={userName} avatarUrl={avatarUrl} />
-              <Field
-                data-invalid={Boolean(!state.ok && state.fieldErrors?.fullName)}
-              >
-                <FieldLabel htmlFor="fullName">Name</FieldLabel>
-                <Input
-                  id="fullName"
-                  name="fullName"
-                  value={fullName}
-                  onChange={(event) => setFullName(event.currentTarget.value)}
-                  aria-invalid={Boolean(
+          </PanelDescription>
+        </PanelHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto py-4">
+          <div className="flex flex-col gap-6 px-4">
+            <form action={action}>
+              <FieldGroup>
+                <ProfileImageEditor userName={userName} avatarUrl={avatarUrl} />
+                <Field
+                  data-invalid={Boolean(
                     !state.ok && state.fieldErrors?.fullName
                   )}
-                  required
+                >
+                  <FieldLabel htmlFor="fullName">Name</FieldLabel>
+                  <Input
+                    id="fullName"
+                    name="fullName"
+                    value={fullName}
+                    onChange={(event) => setFullName(event.currentTarget.value)}
+                    aria-invalid={Boolean(
+                      !state.ok && state.fieldErrors?.fullName
+                    )}
+                    required
+                  />
+                  <FieldError>
+                    {!state.ok ? state.fieldErrors?.fullName?.[0] : undefined}
+                  </FieldError>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="email">Email</FieldLabel>
+                  <Input id="email" value={email} readOnly disabled />
+                  <FieldDescription>
+                    Your sign-in email cannot be changed here.
+                  </FieldDescription>
+                </Field>
+                <ActionFeedback
+                  state={state}
+                  successTitle="Profile updated"
+                  errorTitle="Could not update profile"
                 />
-                <FieldError>
-                  {!state.ok ? state.fieldErrors?.fullName?.[0] : undefined}
-                </FieldError>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="email">Email</FieldLabel>
-                <Input id="email" value={email} readOnly disabled />
-                <FieldDescription>
-                  Your sign-in email cannot be changed here.
-                </FieldDescription>
-              </Field>
-              {state.message ? (
-                state.ok ? (
-                  <p className="text-sm text-muted-foreground">
-                    {state.message}
-                  </p>
-                ) : (
-                  <FieldError>{state.message}</FieldError>
-                )
-              ) : null}
-              <Field>
-                <Button type="submit" disabled={pending}>
-                  {pending ? (
-                    <Spinner data-icon="inline-start" />
-                  ) : (
-                    <SaveIcon data-icon="inline-start" />
-                  )}
-                  {pending ? "Saving…" : "Save profile"}
-                </Button>
-              </Field>
-            </FieldGroup>
-          </form>
+                <Field>
+                  <Button type="submit" disabled={pending}>
+                    {pending ? (
+                      <Spinner data-icon="inline-start" />
+                    ) : (
+                      <SaveIcon data-icon="inline-start" />
+                    )}
+                    {pending ? "Saving…" : "Save profile"}
+                  </Button>
+                </Field>
+              </FieldGroup>
+            </form>
 
-          <Separator />
+            <Separator />
 
-          <section
-            className="flex flex-col gap-3"
-            aria-labelledby="notifications-title"
-          >
-            <div>
-              <h2
-                id="notifications-title"
-                className="flex items-center gap-2 font-medium"
-              >
-                <BellIcon aria-hidden="true" />
-                Notifications
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Receive draw, bracket, result, and invitation updates on this
-                device.
-              </p>
-            </div>
-            {canEnableNotifications ? (
-              <PushNotifications />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Create or join a game to enable notifications.
-              </p>
-            )}
-          </section>
+            <section
+              className="flex flex-col gap-3"
+              aria-labelledby="notifications-title"
+            >
+              <div>
+                <h2
+                  id="notifications-title"
+                  className="flex items-center gap-2 font-medium"
+                >
+                  <BellIcon aria-hidden="true" />
+                  Notifications
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Receive draw, bracket, result, and invitation updates on this
+                  device.
+                </p>
+              </div>
+              {canEnableNotifications ? (
+                <PushNotifications />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Create or join a game to enable notifications.
+                </p>
+              )}
+            </section>
+          </div>
         </div>
-
-        <SheetFooter>
+        <PanelFooter className={cn(isMobile && "border-t pt-4")}>
           <form action={signOut}>
             <Button type="submit" variant="outline" className="w-full">
               <LogOutIcon data-icon="inline-start" />
               Sign out
             </Button>
           </form>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </PanelFooter>
+      </PanelContent>
+    </Panel>
   )
 }

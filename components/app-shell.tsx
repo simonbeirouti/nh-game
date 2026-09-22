@@ -3,6 +3,7 @@ import { TrophyIcon } from "lucide-react"
 
 import { ProfileSheet } from "@/components/profile-sheet"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { Button } from "@/components/ui/button"
 
 export function AppShell({
   children,
@@ -10,12 +11,14 @@ export function AppShell({
   email,
   avatarUrl,
   canEnableNotifications,
+  isAdmin,
 }: {
   children: React.ReactNode
   userName: string
   email: string
   avatarUrl: string | null
   canEnableNotifications: boolean
+  isAdmin: boolean
 }) {
   return (
     <div className="min-h-svh bg-background">
@@ -28,9 +31,18 @@ export function AppShell({
             <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <TrophyIcon aria-hidden="true" />
             </span>
-            <span>NH Games</span>
+            <span>CoLabs Games</span>
           </Link>
           <div className="flex items-center gap-1">
+            {isAdmin ? (
+              <Button
+                variant="ghost"
+                render={<Link href="/admin" />}
+                nativeButton={false}
+              >
+                Admin
+              </Button>
+            ) : null}
             <ThemeToggle />
             <ProfileSheet
               userName={userName}

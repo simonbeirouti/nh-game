@@ -7,6 +7,9 @@ import { cn } from "cn"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
+const dialogOverlayClassName =
+  "fixed inset-0 isolate z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0"
+
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />
 }
@@ -30,10 +33,7 @@ function DialogOverlay({
   return (
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
-      className={cn(
-        "fixed inset-0 isolate z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
-        className
-      )}
+      className={cn(dialogOverlayClassName, className)}
       {...props}
     />
   )
@@ -42,14 +42,25 @@ function DialogOverlay({
 function DialogContent({
   className,
   children,
+  onBackdropPointerDown,
   showCloseButton = true,
   ...props
 }: DialogPrimitive.Popup.Props & {
+  onBackdropPointerDown?: React.PointerEventHandler<HTMLDivElement>
   showCloseButton?: boolean
 }) {
   return (
     <DialogPortal>
-      <DialogOverlay />
+      {onBackdropPointerDown ? (
+        <div
+          aria-hidden="true"
+          data-slot="dialog-overlay"
+          className={dialogOverlayClassName}
+          onPointerDown={onBackdropPointerDown}
+        />
+      ) : (
+        <DialogOverlay />
+      )}
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
@@ -70,8 +81,7 @@ function DialogContent({
               />
             }
           >
-            <XIcon
-            />
+            <XIcon />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
         )}

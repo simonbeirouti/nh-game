@@ -5,8 +5,8 @@ export function safeNextPath(value: string | null | undefined): string {
   if (!value?.startsWith("/") || value.startsWith("//")) return "/dashboard"
 
   try {
-    const url = new URL(value, "https://nh-games.invalid")
-    if (url.origin !== "https://nh-games.invalid") return "/dashboard"
+    const url = new URL(value, "https://colabs-games.invalid")
+    if (url.origin !== "https://colabs-games.invalid") return "/dashboard"
     return `${url.pathname}${url.search}${url.hash}`
   } catch {
     return "/dashboard"

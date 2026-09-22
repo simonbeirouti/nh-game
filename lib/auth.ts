@@ -34,6 +34,12 @@ export const getCurrentViewer = cache(async () => {
   return { user, role, isAdmin: role === "admin" }
 })
 
+export async function requireAdmin() {
+  const viewer = await getCurrentViewer()
+  if (!viewer?.isAdmin) throw new Error("Administrator access is required")
+  return viewer
+}
+
 export function defaultDisplayName(email: string): string {
   const candidate = email
     .split("@")[0]

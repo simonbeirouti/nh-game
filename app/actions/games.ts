@@ -24,6 +24,42 @@ const createGameSchema = z.object({
   creatorParticipates: z.enum(["on"]).optional().transform(Boolean),
 })
 
+const moveParticipantSchema = z.object({
+  gameId: z.uuid(),
+  userId: z.uuid(),
+  targetSeed: z.coerce.number().int().positive(),
+})
+
+const matchResultSchema = z.object({
+  gameId: z.uuid(),
+  matchId: z.uuid(),
+  winnerId: z.uuid(),
+})
+
+const matchScoreSchema = z.object({
+  gameId: z.uuid(),
+  matchId: z.uuid(),
+  participantAScore: z
+    .union([z.literal(""), z.coerce.number().int().min(0).max(999)])
+    .transform((value) => (value === "" ? null : value)),
+  participantBScore: z
+    .union([z.literal(""), z.coerce.number().int().min(0).max(999)])
+    .transform((value) => (value === "" ? null : value)),
+})
+
+function actionFailure(error: unknown, fallback: string): ActionState {
+  return {
+    ok: false,
+    message: error instanceof Error ? error.message : fallback,
+  }
+}
+
+function revalidateManagedGame(gameId: string) {
+  revalidatePath(`/games/${gameId}`)
+  revalidatePath("/admin")
+  revalidatePath("/dashboard")
+}
+
 async function requireViewer() {
   const viewer = await getCurrentViewer()
   if (!viewer?.user.email) redirect("/auth")
@@ -167,6 +203,97 @@ export async function recordMatchResult(formData: FormData) {
   revalidatePath("/dashboard")
 }
 
+export async function moveGameParticipant(
+  formData: FormData
+): Promise<ActionState> {
+  try {
+    const parsed = moveParticipantSchema.parse({
+      gameId: formData.get("gameId"),
+      userId: formData.get("userId"),
+      targetSeed: formData.get("targetSeed"),
+    })
+    const { admin } = await requireGameManager(parsed.gameId)
+    const { error } = await admin.rpc("service_admin_reseed_participant", {
+      p_game_id: parsed.gameId,
+      p_user_id: parsed.userId,
+      p_target_seed: parsed.targetSeed,
+    })
+    if (error) throw new Error(error.message)
+    revalidateManagedGame(parsed.gameId)
+    return { ok: true, message: "Seed order updated." }
+  } catch (error) {
+    return actionFailure(error, "Could not move participant.")
+  }
+}
+
+export async function recordGameMatchResult(
+  formData: FormData
+): Promise<ActionState> {
+  try {
+    const parsed = matchResultSchema.parse({
+      gameId: formData.get("gameId"),
+      matchId: formData.get("matchId"),
+      winnerId: formData.get("winnerId"),
+    })
+    await recordMatchResult(formData)
+    revalidateManagedGame(parsed.gameId)
+    return { ok: true, message: "Result recorded." }
+  } catch (error) {
+    return actionFailure(error, "Could not record result.")
+  }
+}
+
+export async function correctGameMatchResult(
+  formData: FormData
+): Promise<ActionState> {
+  try {
+    const parsed = matchResultSchema.parse({
+      gameId: formData.get("gameId"),
+      matchId: formData.get("matchId"),
+      winnerId: formData.get("winnerId"),
+    })
+    const { admin } = await requireGameManager(parsed.gameId)
+    const { error } = await admin.rpc("service_admin_correct_match_result", {
+      p_game_id: parsed.gameId,
+      p_match_id: parsed.matchId,
+      p_winner_id: parsed.winnerId,
+    })
+    if (error) throw new Error(error.message)
+    revalidateManagedGame(parsed.gameId)
+    return {
+      ok: true,
+      message: "Result corrected; dependent results were cleared.",
+    }
+  } catch (error) {
+    return actionFailure(error, "Could not correct result.")
+  }
+}
+
+export async function updateGameMatchScore(
+  formData: FormData
+): Promise<ActionState> {
+  try {
+    const parsed = matchScoreSchema.parse({
+      gameId: formData.get("gameId"),
+      matchId: formData.get("matchId"),
+      participantAScore: formData.get("participantAScore") ?? "",
+      participantBScore: formData.get("participantBScore") ?? "",
+    })
+    const { admin } = await requireGameManager(parsed.gameId)
+    const { error } = await admin.rpc("service_admin_update_match_score", {
+      p_game_id: parsed.gameId,
+      p_match_id: parsed.matchId,
+      p_participant_a_score: parsed.participantAScore,
+      p_participant_b_score: parsed.participantBScore,
+    })
+    if (error) throw new Error(error.message)
+    revalidateManagedGame(parsed.gameId)
+    return { ok: true, message: "Score updated." }
+  } catch (error) {
+    return actionFailure(error, "Could not update score.")
+  }
+}
+
 export async function archiveGame(formData: FormData) {
   const gameId = z.uuid().parse(formData.get("gameId"))
   const { admin, actorId } = await requireGameManager(gameId)
@@ -185,7 +312,7 @@ export async function archiveGame(formData: FormData) {
       participants?.map((participant) => participant.user_id) ?? [],
       {
         title: "Game archived",
-        body: "This NH Games tournament has been archived.",
+        body: "This CoLabs Games tournament has been archived.",
         url: `/games/${gameId}`,
       }
     )

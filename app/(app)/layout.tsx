@@ -30,6 +30,7 @@ export default async function AuthenticatedLayout({
       email={email}
       avatarUrl={profile?.avatar_url ?? null}
       canEnableNotifications={Boolean(game)}
+      isAdmin={viewer.isAdmin}
     >
       {children}
     </AppShell>

@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next"
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "NH Games",
-    short_name: "NH Games",
+    name: "CoLabs Games",
+    short_name: "CoLabs Games",
     description: "Private, trustworthy coworker tournaments.",
     start_url: "/dashboard",
     display: "standalone",

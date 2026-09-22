@@ -60,6 +60,7 @@ export function GameControls({
   maxParticipants,
   canStart,
   canArchive,
+  className,
 }: {
   gameId: string
   name: string
@@ -67,13 +68,16 @@ export function GameControls({
   maxParticipants: number | null
   canStart: boolean
   canArchive: boolean
+  className?: string
 }) {
   const [openControl, setOpenControl] = useState<OpenControl>(null)
 
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger render={<Button variant="outline" />}>
+        <DropdownMenuTrigger
+          render={<Button variant="outline" className={className} />}
+        >
           Actions
           <ChevronDownIcon data-icon="inline-end" />
         </DropdownMenuTrigger>
