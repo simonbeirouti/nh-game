@@ -1,16 +1,25 @@
-import { Geist, Geist_Mono } from "next/font/google"
+import type { Metadata, Viewport } from "next"
 
 import "./globals.css"
+import { ServiceWorkerRegistration } from "@/components/service-worker-registration"
 import { ThemeProvider } from "@/components/theme-provider"
+import { Toaster } from "@/components/ui/toast"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'})
+export const metadata: Metadata = {
+  title: { default: "NH Games", template: "%s · NH Games" },
+  description: "Private, trustworthy coworker tournaments.",
+  applicationName: "NH Games",
+  appleWebApp: { capable: true, title: "NH Games", statusBarStyle: "default" },
+  icons: { apple: "/apple-touch-icon.svg" },
+}
 
-const fontMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-mono",
-})
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#252525" },
+  ],
+}
 
 export default function RootLayout({
   children,
@@ -18,14 +27,15 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html
-      lang="en"
-      suppressHydrationWarning
-      className={cn("antialiased", fontMono.variable, "font-sans", geist.variable)}
-    >
+    <html lang="en" suppressHydrationWarning className="font-sans antialiased">
       <body>
         <ThemeProvider>
-          <TooltipProvider>{children}</TooltipProvider>
+          <TooltipProvider>
+            <Toaster>
+              {children}
+              <ServiceWorkerRegistration />
+            </Toaster>
+          </TooltipProvider>
         </ThemeProvider>
       </body>
     </html>

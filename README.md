@@ -1,21 +1,64 @@
-# Next.js template
+# NH Games
 
-This is a Next.js template with shadcn/ui.
+NH Games is a private tournament manager. It supports a shared passwordless
+email login, invite-only game membership, user-created single-elimination games,
+reproducible secure draws, winner progression, archiving, and opt-in push
+notifications. Administrators are assigned through the locked `user_roles`
+database table and can manage every game.
 
-## Adding components
+## Local setup
 
-To add components to your app, run the following command:
+Prerequisites: Node.js, pnpm, Docker, and the Supabase CLI.
 
 ```bash
-npx shadcn@latest add button
+pnpm install
+cp .env.example .env.local
+supabase start
+supabase status
 ```
 
-This will place the ui components in the `components` directory.
+Copy the local publishable and service-role keys printed by `supabase status`
+into `.env.local`, then generate VAPID keys with `pnpm exec web-push generate-vapid-keys`
+if you want to exercise notifications.
 
-## Using components
+`ADMIN_EMAIL` bootstraps the first administrator only while no admin role exists.
+After bootstrap, assign any additional administrators directly in the database.
+There are no legacy login or pending-invitation routes: every email link returns
+through `/auth/confirm`, and invitations resume from `/join/{token}`.
 
-To use the components in your app, import them as follows:
-
-```tsx
-import { Button } from "@/components/ui/button";
+```bash
+pnpm dev
 ```
+
+Open `http://127.0.0.1:3000`. Local email is available at
+`http://127.0.0.1:7004`. Supabase uses the isolated 7000-series ports documented
+in `supabase/config.toml`; Next.js remains on port 3000.
+
+Reset the local database and load the visual development fixtures with:
+
+```bash
+pnpm db:reset
+```
+
+The seed creates 20 users, four active games, and two completed games. Request a
+local magic link for `hello@simonbeirouti.com` to see all six games as the seeded
+administrator. Other seeded accounts use `player02@example.com` through
+`player20@example.com`.
+
+For realistic service-worker and push testing, use `pnpm dev:https` and set
+`NEXT_PUBLIC_APP_URL=https://localhost:3000`.
+
+## Validation
+
+```bash
+supabase db reset --local
+supabase test db
+pnpm test
+pnpm typecheck
+pnpm lint
+pnpm build
+pnpm test:e2e
+```
+
+The browser smoke test expects Playwright's Chromium binary. Install it once
+with `pnpm exec playwright install chromium` if it is not already present.
