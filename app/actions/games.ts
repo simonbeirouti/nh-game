@@ -7,6 +7,7 @@ import { z } from "zod"
 
 import type { ActionState } from "@/lib/action-state"
 import { getCurrentViewer } from "@/lib/auth"
+import { joinGameForUser } from "@/lib/game-join"
 import { sendPushToUsers } from "@/lib/push"
 import { createAdminClient } from "@/lib/supabase/admin"
 import {
@@ -88,6 +89,42 @@ async function requireGameManager(gameId: string) {
     user: viewer.user,
     actorId: viewer.isAdmin ? game.created_by : viewer.user.id,
   }
+}
+
+export async function joinPublicGame(formData: FormData) {
+  const parsedGameId = z.uuid().safeParse(formData.get("gameId"))
+  if (!parsedGameId.success) {
+    redirect(
+      `/dashboard?joinError=${encodeURIComponent("This game is not available to join")}`
+    )
+  }
+
+  const { user } = await requireViewer()
+  const admin = createAdminClient()
+  const { data: game, error } = await admin
+    .from("games")
+    .select("invite_token")
+    .eq("id", parsedGameId.data)
+    .eq("status", "open")
+    .maybeSingle()
+
+  if (error || !game) {
+    redirect(
+      `/dashboard?joinError=${encodeURIComponent("This game is no longer available to join")}`
+    )
+  }
+
+  let gameId: string
+  try {
+    gameId = await joinGameForUser(user, game.invite_token)
+  } catch (joinError) {
+    const message =
+      joinError instanceof Error ? joinError.message : "Could not join game"
+    redirect(`/dashboard?joinError=${encodeURIComponent(message)}`)
+  }
+
+  revalidatePath("/dashboard")
+  redirect(`/games/${gameId}?joined=1`)
 }
 
 export async function createGame(

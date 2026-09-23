@@ -1,6 +1,23 @@
 import { describe, expect, it } from "vitest"
 
-import { deriveRestoredGameStatus } from "./admin-lifecycle"
+import {
+  availableAdminParticipants,
+  deriveRestoredGameStatus,
+} from "./admin-lifecycle"
+
+describe("availableAdminParticipants", () => {
+  it("excludes users who already belong to the game", () => {
+    const users = [
+      { id: "creator", name: "Creator" },
+      { id: "attendee", name: "Attendee" },
+      { id: "admin", name: "Administrator" },
+    ]
+
+    expect(
+      availableAdminParticipants(users, ["creator", "attendee"])
+    ).toEqual([{ id: "admin", name: "Administrator" }])
+  })
+})
 
 describe("deriveRestoredGameStatus", () => {
   it("prioritizes retained completion and draw timestamps", () => {

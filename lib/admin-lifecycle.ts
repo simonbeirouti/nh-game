@@ -1,5 +1,13 @@
 import type { GameStatus } from "@/lib/tournament/types"
 
+export function availableAdminParticipants<T extends { id: string }>(
+  users: T[],
+  participantIds: string[]
+): T[] {
+  const participantIdSet = new Set(participantIds)
+  return users.filter((user) => !participantIdSet.has(user.id))
+}
+
 export function deriveRestoredGameStatus({
   completedAt,
   randomizedAt,

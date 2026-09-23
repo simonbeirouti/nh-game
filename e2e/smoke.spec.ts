@@ -53,6 +53,27 @@ test("renders the shared sign-in and account creation page", async ({
   await expect(page.getByLabel("Confirm password")).toBeVisible()
 })
 
+test("renders not-found routes without React script warnings", async ({
+  page,
+}) => {
+  const scriptWarnings: string[] = []
+  page.on("console", (message) => {
+    if (
+      message.type() === "error" &&
+      message.text().includes("Encountered a script tag while rendering")
+    ) {
+      scriptWarnings.push(message.text())
+    }
+  })
+
+  await page.goto("/route-that-does-not-exist")
+
+  await expect(
+    page.getByRole("heading", { name: "This page could not be found." })
+  ).toBeVisible()
+  expect(scriptWarnings).toEqual([])
+})
+
 test("publishes an installable manifest and offline fallback", async ({
   request,
 }) => {

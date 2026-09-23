@@ -122,7 +122,7 @@ test("password auth, invitations, and database roles work together", async ({
   const gameName = `E2E central auth ${suffix}`
   const ownerPassword = "owner-password-123"
   const invitedPassword = "invited-password-123"
-  const adminPassword = "admin-password-123"
+  const adminPassword = process.env.ADMIN_PASSWORD ?? "admin-password-123"
 
   // New account creation rejects open redirects.
   await page.goto("/auth?next=https%3A%2F%2Fexample.com%2Fsteal")
@@ -195,11 +195,27 @@ test("password auth, invitations, and database roles work together", async ({
   await invitedPage
     .getByRole("button", { name: `Join as ${invitedEmail}` })
     .click()
-  await expect(invitedPage).toHaveURL(/\/games\/[0-9a-f-]+$/)
+  await expect(invitedPage).toHaveURL(/\/games\/[0-9a-f-]+\?joined=1$/)
   await expect(invitedPage.getByText(/ \(you\)$/)).toBeVisible()
   await expect(
     invitedPage.getByRole("button", { name: "Actions" })
   ).toHaveCount(0)
+
+  // Members can leave while the game is open, lose ordinary URL access, and
+  // rejoin from the same private invitation.
+  const gamePath = new URL(invitedPage.url()).pathname
+  await invitedPage.getByRole("button", { name: /View \d+ players/ }).click()
+  await invitedPage
+    .getByRole("button", { name: `Remove ${invitedName}` })
+    .click()
+  await expect(invitedPage).toHaveURL(/\/dashboard$/)
+  const leftGameResponse = await invitedPage.goto(gamePath)
+  expect(leftGameResponse?.status()).toBe(404)
+  await invitedPage.goto(inviteUrl)
+  await invitedPage
+    .getByRole("button", { name: `Join as ${invitedEmail}` })
+    .click()
+  await expect(invitedPage).toHaveURL(/\/games\/[0-9a-f-]+\?joined=1$/)
 
   // Existing signed-out invited user follows the same resumable flow.
   await signOut(invitedPage)
@@ -210,21 +226,25 @@ test("password auth, invitations, and database roles work together", async ({
   await invitedPage
     .getByRole("button", { name: `Join as ${invitedEmail}` })
     .click()
-  await expect(invitedPage).toHaveURL(/\/games\/[0-9a-f-]+$/)
+  await expect(invitedPage).toHaveURL(/\/games\/[0-9a-f-]+\?joined=1$/)
 
   // Existing signed-in user can join directly without another login.
   await invitedPage.goto(inviteUrl)
   await invitedPage
     .getByRole("button", { name: `Join as ${invitedEmail}` })
     .click()
-  await expect(invitedPage).toHaveURL(/\/games\/[0-9a-f-]+$/)
+  await expect(invitedPage).toHaveURL(/\/games\/[0-9a-f-]+\?joined=1$/)
   await invitedContext.close()
 
   // ADMIN_EMAIL bootstraps the first database role and can manage every game.
   const adminContext = await browser.newContext()
   const adminPage = await adminContext.newPage()
   await adminPage.goto("/auth")
-  await resetPassword(adminPage, request, adminAddress, adminPassword)
+  if (process.env.ADMIN_PASSWORD) {
+    await signInWithPassword(adminPage, adminAddress, adminPassword)
+  } else {
+    await resetPassword(adminPage, request, adminAddress, adminPassword)
+  }
   await expect(adminPage).toHaveURL(/\/dashboard$/)
   await expect(adminPage.getByRole("button", { name: "Admin" })).toBeVisible()
   await adminPage.getByRole("button", { name: "Admin" }).click()
@@ -232,6 +252,9 @@ test("password auth, invitations, and database roles work together", async ({
   await expect(adminPage.getByRole("tab", { name: /Users/ })).toBeVisible()
   await expect(adminPage.getByRole("tab", { name: /Games/ })).toBeVisible()
 
+  await adminPage
+    .getByRole("textbox", { name: "Search users" })
+    .fill(adminAddress)
   const userRow = adminPage.getByLabel("View Simon Beirouti")
   await userRow.focus()
   await userRow.press("Enter")
@@ -254,13 +277,18 @@ test("password auth, invitations, and database roles work together", async ({
   await expect(adminPage.getByText("Game details updated.")).toBeVisible()
   gameSheet = adminPage.getByRole("dialog", { name: editedGameName })
 
-  const userCombobox = gameSheet.getByRole("combobox")
-  await userCombobox.fill("Ava Nguyen")
-  await adminPage.getByRole("option", { name: /Ava Nguyen/ }).click()
-  await gameSheet.getByRole("button", { name: "Add participant" }).click()
+  await gameSheet
+    .getByRole("combobox", { name: "Add participant" })
+    .selectOption({ label: "Ava Nguyen (player02@example.com)" })
+  await gameSheet.getByRole("button", { name: "Add", exact: true }).click()
   await expect(adminPage.getByText("Participant added.")).toBeVisible()
   await gameSheet
-    .getByRole("row", { name: /Ava Nguyen/ })
+    .getByRole("listitem")
+    .filter({ hasText: "Ava Nguyen" })
+    .getByRole("button", { name: "Remove" })
+    .click()
+  await adminPage
+    .getByRole("alertdialog")
     .getByRole("button", { name: "Remove" })
     .click()
   await expect(adminPage.getByText("Participant removed.")).toBeVisible()
@@ -289,7 +317,10 @@ test("password auth, invitations, and database roles work together", async ({
     .fill(editedGameName)
   await adminPage.getByLabel(`View ${editedGameName}`).press("Enter")
   gameSheet = adminPage.getByRole("dialog", { name: editedGameName })
-  await expect(gameSheet.getByText(`${invitedName} (deleted)`)).toBeVisible()
+  const deletedParticipant = gameSheet
+    .getByRole("listitem")
+    .filter({ hasText: invitedName })
+  await expect(deletedParticipant.getByText("Deleted account")).toBeVisible()
 
   await gameSheet.getByRole("button", { name: "Start draw" }).click()
   await adminPage
@@ -298,9 +329,37 @@ test("password auth, invitations, and database roles work together", async ({
     .click()
   await expect(adminPage.getByText("Draw created.")).toBeVisible()
 
-  await gameSheet.getByRole("button", { name: / won$/ }).first().click()
+  await gameSheet.getByRole("button", { name: "Draft" }).click()
+  let draftDialog = adminPage.getByRole("dialog", {
+    name: `${editedGameName} draft`,
+  })
+  await expect(draftDialog).toBeVisible()
+  const participantActions = draftDialog.getByRole("button", {
+    name: /Quick actions for /,
+  })
+  const correctionActionName = await participantActions
+    .nth(1)
+    .getAttribute("aria-label")
+  expect(correctionActionName).toBeTruthy()
+  await participantActions.first().click()
+  await adminPage.getByRole("menuitem", { name: "Set as winner" }).click()
   await expect(adminPage.getByText("Result recorded.")).toBeVisible()
-  await gameSheet.getByRole("button", { name: /^Change to / }).click()
+  await draftDialog.getByRole("button", { name: "Close" }).click()
+  await adminPage.reload()
+  await adminPage.getByRole("tab", { name: /Games/ }).click()
+  await adminPage
+    .getByRole("textbox", { name: "Search games" })
+    .fill(editedGameName)
+  await adminPage.getByLabel(`View ${editedGameName}`).press("Enter")
+  gameSheet = adminPage.getByRole("dialog", { name: editedGameName })
+  await gameSheet.getByRole("button", { name: "Draft" }).click()
+  draftDialog = adminPage.getByRole("dialog", {
+    name: `${editedGameName} draft`,
+  })
+  await draftDialog
+    .getByRole("button", { name: correctionActionName!, exact: true })
+    .click()
+  await adminPage.getByRole("menuitem", { name: "Set as winner" }).click()
   await adminPage
     .getByRole("alertdialog")
     .getByRole("button", { name: "Correct result" })
@@ -308,6 +367,7 @@ test("password auth, invitations, and database roles work together", async ({
   await expect(
     adminPage.getByText("Result corrected; dependent results were cleared.")
   ).toBeVisible()
+  await draftDialog.getByRole("button", { name: "Close" }).click()
 
   await gameSheet.getByRole("button", { name: "Reset draw" }).click()
   await adminPage

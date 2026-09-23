@@ -42,16 +42,19 @@ import {
   SearchIcon,
   Trash2Icon,
   TrophyIcon,
+  UserPlusIcon,
   UserMinusIcon,
   UsersIcon,
 } from "lucide-react"
 
 import {
+  addAdminParticipant,
   archiveAdminGame,
   correctAdminMatchResult,
   deleteAdminGame,
   moveAdminParticipant,
   recordAdminMatchResult,
+  removeAdminParticipant,
   resetAdminGame,
   sendAdminPasswordRecovery,
   softDeleteAdminUser,
@@ -120,6 +123,10 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select"
+import {
   Pagination,
   PaginationContent,
   PaginationItem,
@@ -147,7 +154,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { useIsMobile } from "@/hooks/use-mobile"
 import type { ActionState } from "@/lib/action-state"
-import { deriveRestoredGameStatus } from "@/lib/admin-lifecycle"
+import {
+  availableAdminParticipants,
+  deriveRestoredGameStatus,
+} from "@/lib/admin-lifecycle"
 import type {
   AdminGameRecord,
   AdminMatchRecord,
@@ -993,9 +1003,11 @@ function DraftDialog({
 
 function GameSheet({
   game,
+  users,
   onClose,
 }: {
   game: AdminGameRecord | null
+  users: AdminUserRecord[]
   onClose: () => void
 }) {
   const { pending, run } = useAdminMutation()
@@ -1014,6 +1026,15 @@ function GameSheet({
   const effectiveStatus = statusOverride ?? game.status
   const participantsEditable = ["open", "full"].includes(effectiveStatus)
   const canStart = participantsEditable && game.participants.length >= 2
+  const availableUsers = availableAdminParticipants(
+    users,
+    game.participants.map((participant) => participant.id)
+  )
+  const hasCapacity =
+    game.maxParticipants === null ||
+    game.participants.length < game.maxParticipants
+  const canAddParticipant =
+    participantsEditable && hasCapacity && availableUsers.length > 0
   const Panel = isMobile ? Drawer : Sheet
   const PanelContent = isMobile ? DrawerContent : SheetContent
   const PanelHeader = isMobile ? DrawerHeader : SheetHeader
@@ -1065,6 +1086,126 @@ function GameSheet({
             </dl>
 
             <CopyInviteButton url={game.inviteUrl} />
+
+            <Separator />
+
+            <section className="flex flex-col gap-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="flex items-center gap-2 font-medium">
+                    <UsersIcon aria-hidden="true" /> Participants
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Add or remove active accounts before the draw is locked.
+                  </p>
+                </div>
+                <Badge variant="secondary">
+                  {game.participants.length}
+                  {game.maxParticipants ? ` / ${game.maxParticipants}` : ""}
+                </Badge>
+              </div>
+
+              {game.participants.length ? (
+                <ul className="flex flex-col gap-2">
+                  {game.participants.map((participant) => (
+                    <li
+                      key={participant.id}
+                      className="flex items-center gap-3 rounded-lg border p-3"
+                    >
+                      <Avatar size="sm">
+                        <AvatarImage
+                          src={participant.avatarUrl ?? undefined}
+                          alt=""
+                        />
+                        <AvatarFallback>
+                          {initials(participant.fullName)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate font-medium">
+                          {participant.fullName}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {participant.email ?? "Deleted account"}
+                        </span>
+                      </span>
+                      {participantsEditable ? (
+                        <ConfirmAction
+                          label="Remove"
+                          title={`Remove ${participant.fullName}?`}
+                          description="They can rejoin while the game remains open and has capacity."
+                          pending={pending}
+                          destructive
+                          icon={<UserMinusIcon data-icon="inline-start" />}
+                          onConfirm={() => {
+                            const formData = gameData()
+                            formData.set("userId", participant.id)
+                            run(removeAdminParticipant, formData)
+                          }}
+                        />
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No participants have joined this game.
+                </p>
+              )}
+
+              {canAddParticipant ? (
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    run(
+                      addAdminParticipant,
+                      new FormData(event.currentTarget)
+                    )
+                  }}
+                >
+                  <input type="hidden" name="gameId" value={game.id} />
+                  <FieldGroup>
+                    <Field>
+                      <FieldLabel htmlFor={`admin-participant-${game.id}`}>
+                        Add participant
+                      </FieldLabel>
+                      <Field orientation="horizontal">
+                        <NativeSelect
+                          id={`admin-participant-${game.id}`}
+                          name="userId"
+                          className="flex-1"
+                          defaultValue={availableUsers[0]?.id}
+                          required
+                        >
+                          {availableUsers.map((user) => (
+                            <NativeSelectOption key={user.id} value={user.id}>
+                              {user.fullName} ({user.email})
+                            </NativeSelectOption>
+                          ))}
+                        </NativeSelect>
+                        <Button type="submit" disabled={pending}>
+                          {pending ? (
+                            <Spinner data-icon="inline-start" />
+                          ) : (
+                            <UserPlusIcon data-icon="inline-start" />
+                          )}
+                          Add
+                        </Button>
+                      </Field>
+                      <FieldDescription>
+                        Only active accounts not already in this game are shown.
+                      </FieldDescription>
+                    </Field>
+                  </FieldGroup>
+                </form>
+              ) : null}
+
+              {participantsEditable && !hasCapacity ? (
+                <p className="text-sm text-muted-foreground">
+                  The participant limit has been reached.
+                </p>
+              ) : null}
+            </section>
 
             <Separator />
 
@@ -1696,6 +1837,7 @@ export function AdminConsole({
       <GameSheet
         key={`${selectedGame?.id ?? "closed"}:${selectedGame?.status ?? "none"}`}
         game={selectedGame}
+        users={users}
         onClose={() => setSelectedGameId(null)}
       />
     </>

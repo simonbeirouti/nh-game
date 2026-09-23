@@ -4,6 +4,7 @@ import { useEffect } from "react"
 
 import { toast } from "@/components/ui/toast"
 import type { ActionState } from "@/lib/action-state"
+import { feedbackToastId } from "@/lib/toast-feedback"
 
 type ToastType = "error" | "info" | "success" | "warning"
 
@@ -19,10 +20,13 @@ export function ActionFeedback({
   useEffect(() => {
     if (!state.message) return
 
+    const title = state.ok ? successTitle : errorTitle
+    const type = state.ok ? "success" : "error"
     toast.add({
-      title: state.ok ? successTitle : errorTitle,
+      id: feedbackToastId("action", title, state.message, type),
+      title,
       description: state.message,
-      type: state.ok ? "success" : "error",
+      type,
     })
   }, [errorTitle, state, successTitle])
 
@@ -39,7 +43,12 @@ export function ToastNotification({
   type?: ToastType
 }) {
   useEffect(() => {
-    toast.add({ title, description, type })
+    toast.add({
+      id: feedbackToastId("notification", title, description ?? "", type),
+      title,
+      description,
+      type,
+    })
   }, [description, title, type])
 
   return null

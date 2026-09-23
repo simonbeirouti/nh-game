@@ -1,10 +1,14 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { TrophyIcon, UsersIcon } from "lucide-react"
+import { TriangleAlertIcon, TrophyIcon, UsersIcon } from "lucide-react"
 
 import { joinAuthenticatedGame } from "@/app/actions/auth"
-import { ToastNotification } from "@/components/action-feedback"
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -69,11 +73,11 @@ export default async function JoinGamePage({
         </CardHeader>
         <CardContent>
           {queryError ? (
-            <ToastNotification
-              title="Could not join game"
-              description={queryError}
-              type="error"
-            />
+            <Alert variant="destructive" className="mb-4">
+              <TriangleAlertIcon aria-hidden="true" />
+              <AlertTitle>Could not join game</AlertTitle>
+              <AlertDescription>{queryError}</AlertDescription>
+            </Alert>
           ) : null}
           {!accepting ? (
             <p className="text-sm text-muted-foreground">

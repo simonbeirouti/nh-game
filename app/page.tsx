@@ -3,6 +3,7 @@ import Link from "next/link"
 import { ArrowRightIcon, TrophyIcon, UsersIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -64,15 +65,18 @@ export default async function HomePage() {
             CoLabs Games
           </Link>
 
-          {user ? (
-            <Button render={<Link href="/dashboard" />} nativeButton={false}>
-              Dashboard
-            </Button>
-          ) : (
-            <Button render={<Link href="/auth" />} nativeButton={false}>
-              Sign in
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            {user ? (
+              <Button render={<Link href="/dashboard" />} nativeButton={false}>
+                Dashboard
+              </Button>
+            ) : (
+              <Button render={<Link href="/auth" />} nativeButton={false}>
+                Sign in
+              </Button>
+            )}
+          </div>
         </nav>
       </header>
 
