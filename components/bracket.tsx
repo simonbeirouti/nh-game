@@ -16,7 +16,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { useRouter } from "next/navigation"
+import { useQueryClient } from "@tanstack/react-query"
 import {
   useCallback,
   useLayoutEffect,
@@ -73,6 +73,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import type { ActionState } from "@/lib/action-state"
+import { gameKeys } from "@/lib/games/queries"
 import type { TournamentMatch } from "@/lib/tournament/types"
 
 type BracketAction = (formData: FormData) => Promise<ActionState>
@@ -370,7 +371,7 @@ export function Bracket({
   canManage: boolean
   preview: boolean
 }) {
-  const router = useRouter()
+  const queryClient = useQueryClient()
   const [pending, startTransition] = useTransition()
   const bracketRef = useRef<HTMLDivElement>(null)
   const matchRefs = useRef(new Map<string, HTMLDivElement>())
@@ -481,7 +482,10 @@ export function Bracket({
       })
       if (result.ok) {
         done?.()
-        router.refresh()
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: gameKeys.detail(gameId) }),
+          queryClient.invalidateQueries({ queryKey: gameKeys.catalogs() }),
+        ])
       }
     })
   }

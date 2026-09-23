@@ -1,4 +1,4 @@
-const CACHE_NAME = "colabs-games-static-v3"
+const CACHE_NAME = "colabs-games-static-v4"
 const OFFLINE_URL = "/offline"
 const PRECACHE = [
   OFFLINE_URL,
@@ -7,10 +7,26 @@ const PRECACHE = [
   "/apple-touch-icon.svg",
 ]
 
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE))
+async function cacheOfflineShell() {
+  const cache = await caches.open(CACHE_NAME)
+  await cache.addAll(PRECACHE)
+  const response = await fetch(OFFLINE_URL, { cache: "no-store" })
+  if (!response.ok) return
+  await cache.put(OFFLINE_URL, response.clone())
+  const html = await response.text()
+  const assets = [...html.matchAll(/(?:src|href)="([^"]+)"/g)]
+    .map((match) => match[1])
+    .filter((path) => path.startsWith("/_next/static/"))
+  await Promise.all(
+    [...new Set(assets)].map(async (asset) => {
+      const assetResponse = await fetch(asset)
+      if (assetResponse.ok) await cache.put(asset, assetResponse)
+    })
   )
+}
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(cacheOfflineShell())
   self.skipWaiting()
 })
 
@@ -21,7 +37,12 @@ self.addEventListener("activate", (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key !== CACHE_NAME)
+            .filter(
+              (key) =>
+                key !== CACHE_NAME &&
+                (key.startsWith("colabs-games-static-") ||
+                  key.startsWith("nh-games-static-"))
+            )
             .map((key) => caches.delete(key))
         )
       )
@@ -29,11 +50,20 @@ self.addEventListener("activate", (event) => {
   self.clients.claim()
 })
 
+self.addEventListener("message", (event) => {
+  if (event.data?.type !== "CLEAR_PRIVATE_STATE") return
+  // Private application data is kept in IndexedDB by the page and cleared
+  // before sign-out. Cache Storage contains only the public offline shell.
+})
+
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url)
   if (event.request.mode === "navigate") {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match(OFFLINE_URL))
+      fetch(event.request).catch(async () => {
+        const cache = await caches.open(CACHE_NAME)
+        return cache.match(OFFLINE_URL)
+      })
     )
     return
   }
@@ -58,26 +88,27 @@ self.addEventListener("fetch", (event) => {
           }
           return response
         })
-        .catch(
-          async () => (await caches.match(event.request)) ?? Response.error()
-        )
+        .catch(async () => {
+          const cache = await caches.open(CACHE_NAME)
+          return (await cache.match(event.request)) ?? Response.error()
+        })
     )
     return
   }
 
   event.respondWith(
-    caches.match(event.request).then(
-      (cached) =>
-        cached ??
-        fetch(event.request).then((response) => {
-          if (response.ok) {
-            const copy = response.clone()
-            void caches
-              .open(CACHE_NAME)
-              .then((cache) => cache.put(event.request, copy))
-          }
-          return response
-        })
+    caches.open(CACHE_NAME).then((cache) =>
+      cache.match(event.request).then(
+        (cached) =>
+          cached ??
+          fetch(event.request).then((response) => {
+            if (response.ok) {
+              const copy = response.clone()
+              void cache.put(event.request, copy)
+            }
+            return response
+          })
+      )
     )
   )
 })

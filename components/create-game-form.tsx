@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useQueryClient } from "@tanstack/react-query"
 import { PlusIcon } from "lucide-react"
 
 import { createGame } from "@/app/actions/games"
@@ -21,18 +22,22 @@ import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import type { ActionState } from "@/lib/action-state"
+import { gameKeys } from "@/lib/games/queries"
 
 const initialState: ActionState<{ gameId: string }> = { ok: false, message: "" }
 
 export function CreateGameForm() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [state, action, pending] = useActionState(createGame, initialState)
   const fieldErrors = state.ok ? undefined : state.fieldErrors
 
   useEffect(() => {
-    if (state.ok && state.data?.gameId)
+    if (state.ok && state.data?.gameId) {
+      void queryClient.invalidateQueries({ queryKey: gameKeys.catalogs() })
       router.push(`/games/${state.data.gameId}`)
-  }, [router, state])
+    }
+  }, [queryClient, router, state])
 
   return (
     <form action={action}>

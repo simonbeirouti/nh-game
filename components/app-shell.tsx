@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 
 export function AppShell({
   children,
+  userId,
   userName,
   email,
   avatarUrl,
@@ -14,6 +15,7 @@ export function AppShell({
   isAdmin,
 }: {
   children: React.ReactNode
+  userId: string
   userName: string
   email: string
   avatarUrl: string | null
@@ -45,6 +47,7 @@ export function AppShell({
             ) : null}
             <ThemeToggle />
             <ProfileSheet
+              userId={userId}
               userName={userName}
               email={email}
               avatarUrl={avatarUrl}

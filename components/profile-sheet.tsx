@@ -8,6 +8,7 @@ import {
   useTransition,
 } from "react"
 import { useRouter } from "next/navigation"
+import { useQueryClient } from "@tanstack/react-query"
 import { cn } from "cn"
 import {
   BellIcon,
@@ -70,6 +71,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { useIsMobile } from "@/hooks/use-mobile"
 import type { ActionState } from "@/lib/action-state"
+import { clearPersistedQueryState } from "@/lib/query-persistence"
 
 const initialState: ActionState = { ok: false, message: "" }
 
@@ -284,17 +286,20 @@ function ProfileImageEditor({
 }
 
 export function ProfileSheet({
+  userId,
   userName,
   email,
   avatarUrl,
   canEnableNotifications,
 }: {
+  userId: string
   userName: string
   email: string
   avatarUrl: string | null
   canEnableNotifications: boolean
 }) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const isMobile = useIsMobile()
   const [fullName, setFullName] = useState(userName)
   const [state, action, pending] = useActionState(updateProfile, initialState)
@@ -310,6 +315,15 @@ export function ProfileSheet({
   const PanelTitle = isMobile ? DrawerTitle : SheetTitle
   const PanelDescription = isMobile ? DrawerDescription : SheetDescription
   const PanelFooter = isMobile ? DrawerFooter : SheetFooter
+
+  async function signOutAndClearCache() {
+    queryClient.clear()
+    await clearPersistedQueryState(userId)
+    navigator.serviceWorker?.controller?.postMessage({
+      type: "CLEAR_PRIVATE_STATE",
+    })
+    await signOut()
+  }
 
   return (
     <Panel {...(isMobile ? { showSwipeHandle: true } : {})}>
@@ -421,7 +435,7 @@ export function ProfileSheet({
           </div>
         </div>
         <PanelFooter className={cn(isMobile && "border-t pt-4")}>
-          <form action={signOut}>
+          <form action={signOutAndClearCache}>
             <Button type="submit" variant="outline" className="w-full">
               <LogOutIcon data-icon="inline-start" />
               Sign out

@@ -18,12 +18,12 @@ import {
 import { CSS } from "@dnd-kit/utilities"
 import {
   useDeferredValue,
+  useMemo,
   useState,
   useTransition,
   type CSSProperties,
-  type KeyboardEvent,
-  type MouseEvent,
 } from "react"
+import { createColumnHelper } from "@tanstack/react-table"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { cn } from "cn"
@@ -64,6 +64,11 @@ import {
   updateAdminMatchScore,
 } from "@/app/actions/admin"
 import { CopyInviteButton } from "@/components/copy-invite-button"
+import {
+  DataTable,
+  dataTableFeatures,
+  type DataTableColumn,
+} from "@/components/data-table"
 import { GameStatusBadge } from "@/components/game-status-badge"
 import {
   AlertDialog,
@@ -122,15 +127,7 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-} from "@/components/ui/pagination"
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Separator } from "@/components/ui/separator"
 import {
   Sheet,
@@ -141,14 +138,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
@@ -166,6 +155,15 @@ import type {
 import type { GameStatus } from "@/lib/tournament/types"
 
 const PAGE_SIZE = 25
+
+const userColumnHelper = createColumnHelper<
+  typeof dataTableFeatures,
+  AdminUserRecord
+>()
+const gameColumnHelper = createColumnHelper<
+  typeof dataTableFeatures,
+  AdminGameRecord
+>()
 
 type AdminAction = (formData: FormData) => Promise<ActionState>
 
@@ -206,66 +204,6 @@ function useAdminMutation() {
   }
 
   return { pending, run }
-}
-
-function Pager({
-  page,
-  count,
-  onPageChange,
-}: {
-  page: number
-  count: number
-  onPageChange: (page: number) => void
-}) {
-  const pages = Math.max(1, Math.ceil(count / PAGE_SIZE))
-  if (pages <= 1) return null
-
-  return (
-    <Pagination>
-      <PaginationContent>
-        <PaginationItem>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => onPageChange(page - 1)}
-          >
-            Previous
-          </Button>
-        </PaginationItem>
-        <PaginationItem>
-          <span className="px-3 text-sm text-muted-foreground">
-            Page {page} of {pages}
-          </span>
-        </PaginationItem>
-        <PaginationItem>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={page >= pages}
-            onClick={() => onPageChange(page + 1)}
-          >
-            Next
-          </Button>
-        </PaginationItem>
-      </PaginationContent>
-    </Pagination>
-  )
-}
-
-function rowClick(event: MouseEvent<HTMLTableRowElement>, open: () => void) {
-  if ((event.target as HTMLElement).closest("a,button,input,textarea,select"))
-    return
-  open()
-}
-
-function rowKeyDown(
-  event: KeyboardEvent<HTMLTableRowElement>,
-  open: () => void
-) {
-  if (event.key !== "Enter" && event.key !== " ") return
-  event.preventDefault()
-  open()
 }
 
 function UserGames({
@@ -975,7 +913,7 @@ function DraftDialog({
                                     <>
                                       <span
                                         aria-hidden="true"
-                                      className="absolute top-1/2 left-full hidden w-4 border-t border-muted-foreground/40 xl:block"
+                                        className="absolute top-1/2 left-full hidden w-4 border-t border-muted-foreground/40 xl:block"
                                       />
                                       <ChevronRightIcon
                                         aria-hidden="true"
@@ -1157,10 +1095,7 @@ function GameSheet({
                 <form
                   onSubmit={(event) => {
                     event.preventDefault()
-                    run(
-                      addAdminParticipant,
-                      new FormData(event.currentTarget)
-                    )
+                    run(addAdminParticipant, new FormData(event.currentTarget))
                   }}
                 >
                   <input type="hidden" name="gameId" value={game.id} />
@@ -1562,40 +1497,190 @@ export function AdminConsole({
   const [gameSearch, setGameSearch] = useState("")
   const deferredUserSearch = useDeferredValue(userSearch.toLowerCase())
   const deferredGameSearch = useDeferredValue(gameSearch.toLowerCase())
-  const [userPage, setUserPage] = useState(1)
-  const [gamePage, setGamePage] = useState(1)
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null)
 
-  const filteredUsers = users.filter((user) =>
-    `${user.fullName} ${user.email} ${user.role}`
-      .toLowerCase()
-      .includes(deferredUserSearch)
-  )
-  const filteredGames = games.filter((game) =>
-    `${game.name} ${game.organizerName} ${game.status}`
-      .toLowerCase()
-      .includes(deferredGameSearch)
-  )
-  const visibleUsers = filteredUsers.slice(
-    (userPage - 1) * PAGE_SIZE,
-    userPage * PAGE_SIZE
-  )
-  const visibleGames = filteredGames.slice(
-    (gamePage - 1) * PAGE_SIZE,
-    gamePage * PAGE_SIZE
-  )
   const selectedUser = users.find((user) => user.id === selectedUserId) ?? null
   const selectedGame = games.find((game) => game.id === selectedGameId) ?? null
   const searchValue = activeTab === "users" ? userSearch : gameSearch
 
+  const userColumns = useMemo(
+    () =>
+      userColumnHelper.columns([
+        userColumnHelper.accessor((user) => `${user.fullName} ${user.email}`, {
+          id: "user",
+          header: "User",
+          sortFn: "text",
+          sortDescFirst: false,
+          cell: ({ row }) => (
+            <div className="flex items-center gap-2">
+              <Avatar size="sm">
+                <AvatarImage src={row.original.avatarUrl ?? undefined} alt="" />
+                <AvatarFallback>
+                  {initials(row.original.fullName)}
+                </AvatarFallback>
+              </Avatar>
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate font-medium">
+                  {row.original.fullName}
+                </span>
+                <span className="truncate text-xs text-muted-foreground">
+                  {row.original.email}
+                </span>
+              </span>
+            </div>
+          ),
+        }),
+        userColumnHelper.accessor("role", {
+          header: "Role",
+          sortFn: "text",
+          sortDescFirst: false,
+          cell: ({ row }) => (
+            <Badge variant="secondary">{row.original.role}</Badge>
+          ),
+        }),
+        userColumnHelper.accessor((user) => user.activeGames.length, {
+          id: "activeGames",
+          header: "Active",
+          sortFn: "basic",
+          sortDescFirst: false,
+        }),
+        userColumnHelper.accessor((user) => user.completedGames.length, {
+          id: "completedGames",
+          header: "Completed",
+          sortFn: "basic",
+          sortDescFirst: false,
+        }),
+        userColumnHelper.accessor(
+          (user) => new Date(user.createdAt).getTime(),
+          {
+            id: "createdAt",
+            header: "Created",
+            sortFn: "basic",
+            sortDescFirst: false,
+            cell: ({ row }) => format(new Date(row.original.createdAt), "PP"),
+          }
+        ),
+        userColumnHelper.accessor(
+          (user) =>
+            user.lastSignInAt
+              ? new Date(user.lastSignInAt).getTime()
+              : undefined,
+          {
+            id: "lastSignInAt",
+            header: "Last sign-in",
+            sortFn: "basic",
+            sortUndefined: "last",
+            sortDescFirst: false,
+            cell: ({ row }) =>
+              row.original.lastSignInAt
+                ? format(new Date(row.original.lastSignInAt), "PP")
+                : "Never",
+          }
+        ),
+        userColumnHelper.display({
+          id: "actions",
+          header: () => <span className="sr-only">Quick actions</span>,
+          enableSorting: false,
+          enableGlobalFilter: false,
+          cell: ({ row }) => (
+            <div className="text-right">
+              <UserQuickActions
+                user={row.original}
+                currentUserId={currentUserId}
+              />
+            </div>
+          ),
+        }),
+      ]) as DataTableColumn<AdminUserRecord>[],
+    [currentUserId]
+  )
+
+  const gameColumns = useMemo(
+    () =>
+      gameColumnHelper.columns([
+        gameColumnHelper.accessor("name", {
+          header: "Game",
+          sortFn: "text",
+          sortDescFirst: false,
+          cell: ({ row }) => (
+            <span className="font-medium">{row.original.name}</span>
+          ),
+        }),
+        gameColumnHelper.accessor("status", {
+          header: "Status",
+          sortFn: "text",
+          sortDescFirst: false,
+          cell: ({ row }) => <GameStatusBadge status={row.original.status} />,
+        }),
+        gameColumnHelper.accessor("organizerName", {
+          header: "Organizer",
+          sortFn: "text",
+          sortDescFirst: false,
+        }),
+        gameColumnHelper.accessor((game) => game.participants.length, {
+          id: "participants",
+          header: "Participants",
+          sortFn: "basic",
+          sortDescFirst: false,
+          cell: ({ row }) => (
+            <>
+              {row.original.participants.length}
+              {row.original.maxParticipants
+                ? ` / ${row.original.maxParticipants}`
+                : ""}
+            </>
+          ),
+        }),
+        gameColumnHelper.accessor(
+          (game) =>
+            game.championId
+              ? game.participants.find(
+                  (participant) => participant.id === game.championId
+                )?.fullName
+              : undefined,
+          {
+            id: "champion",
+            header: "Champion",
+            sortFn: "text",
+            sortUndefined: "last",
+            sortDescFirst: false,
+            cell: ({ getValue }) => getValue() ?? "—",
+          }
+        ),
+        gameColumnHelper.accessor(
+          (game) => new Date(game.updatedAt).getTime(),
+          {
+            id: "updatedAt",
+            header: "Updated",
+            sortFn: "basic",
+            sortDescFirst: false,
+            cell: ({ row }) => format(new Date(row.original.updatedAt), "PP"),
+          }
+        ),
+        gameColumnHelper.display({
+          id: "actions",
+          header: () => <span className="sr-only">Quick actions</span>,
+          enableSorting: false,
+          enableGlobalFilter: false,
+          cell: ({ row }) => (
+            <div className="text-right">
+              <GameQuickActions
+                game={row.original}
+                onOpen={() => setSelectedGameId(row.original.id)}
+              />
+            </div>
+          ),
+        }),
+      ]) as DataTableColumn<AdminGameRecord>[],
+    []
+  )
+
   function updateSearch(value: string) {
     if (activeTab === "users") {
       setUserSearch(value)
-      setUserPage(1)
     } else {
       setGameSearch(value)
-      setGamePage(1)
     }
   }
 
@@ -1645,95 +1730,26 @@ export function AdminConsole({
         <TabsContent value="users" className="pt-4">
           <Card>
             <CardContent className="flex flex-col gap-4">
-              {visibleUsers.length ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>User</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Active</TableHead>
-                      <TableHead>Completed</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead>Last sign-in</TableHead>
-                      <TableHead className="w-12">
-                        <span className="sr-only">Quick actions</span>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {visibleUsers.map((user) => (
-                      <TableRow
-                        key={user.id}
-                        className="group/user-row"
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`View ${user.fullName}`}
-                        onClick={(event) =>
-                          rowClick(event, () => setSelectedUserId(user.id))
-                        }
-                        onKeyDown={(event) =>
-                          rowKeyDown(event, () => setSelectedUserId(user.id))
-                        }
-                      >
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Avatar size="sm">
-                              <AvatarImage
-                                src={user.avatarUrl ?? undefined}
-                                alt=""
-                              />
-                              <AvatarFallback>
-                                {initials(user.fullName)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="flex min-w-0 flex-col">
-                              <span className="truncate font-medium">
-                                {user.fullName}
-                              </span>
-                              <span className="truncate text-xs text-muted-foreground">
-                                {user.email}
-                              </span>
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">{user.role}</Badge>
-                        </TableCell>
-                        <TableCell>{user.activeGames.length}</TableCell>
-                        <TableCell>{user.completedGames.length}</TableCell>
-                        <TableCell>
-                          {format(new Date(user.createdAt), "PP")}
-                        </TableCell>
-                        <TableCell>
-                          {user.lastSignInAt
-                            ? format(new Date(user.lastSignInAt), "PP")
-                            : "Never"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <UserQuickActions
-                            user={user}
-                            currentUserId={currentUserId}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <Empty>
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <UsersIcon />
-                    </EmptyMedia>
-                    <EmptyTitle>No users found</EmptyTitle>
-                    <EmptyDescription>Try another search.</EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              )}
-              <Pager
-                page={userPage}
-                count={filteredUsers.length}
-                onPageChange={setUserPage}
+              <DataTable
+                columns={userColumns}
+                data={users}
+                globalFilter={deferredUserSearch}
+                onGlobalFilterChange={setUserSearch}
+                pageSize={PAGE_SIZE}
+                rowClassName={() => "group/user-row"}
+                rowLabel={(user) => `View ${user.fullName}`}
+                onRowActivate={(user) => setSelectedUserId(user.id)}
+                empty={
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <UsersIcon />
+                      </EmptyMedia>
+                      <EmptyTitle>No users found</EmptyTitle>
+                      <EmptyDescription>Try another search.</EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                }
               />
             </CardContent>
           </Card>
@@ -1741,85 +1757,26 @@ export function AdminConsole({
         <TabsContent value="games" className="pt-4">
           <Card>
             <CardContent className="flex flex-col gap-4">
-              {visibleGames.length ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Game</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Organizer</TableHead>
-                      <TableHead>Participants</TableHead>
-                      <TableHead>Champion</TableHead>
-                      <TableHead>Updated</TableHead>
-                      <TableHead className="w-12">
-                        <span className="sr-only">Quick actions</span>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {visibleGames.map((game) => {
-                      const champion = game.championId
-                        ? game.participants.find(
-                            (participant) => participant.id === game.championId
-                          )
-                        : null
-                      return (
-                        <TableRow
-                          key={game.id}
-                          className="group/game-row"
-                          role="button"
-                          tabIndex={0}
-                          aria-label={`View ${game.name}`}
-                          onClick={(event) =>
-                            rowClick(event, () => setSelectedGameId(game.id))
-                          }
-                          onKeyDown={(event) =>
-                            rowKeyDown(event, () => setSelectedGameId(game.id))
-                          }
-                        >
-                          <TableCell className="font-medium">
-                            {game.name}
-                          </TableCell>
-                          <TableCell>
-                            <GameStatusBadge status={game.status} />
-                          </TableCell>
-                          <TableCell>{game.organizerName}</TableCell>
-                          <TableCell>
-                            {game.participants.length}
-                            {game.maxParticipants
-                              ? ` / ${game.maxParticipants}`
-                              : ""}
-                          </TableCell>
-                          <TableCell>{champion?.fullName ?? "—"}</TableCell>
-                          <TableCell>
-                            {format(new Date(game.updatedAt), "PP")}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <GameQuickActions
-                              game={game}
-                              onOpen={() => setSelectedGameId(game.id)}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              ) : (
-                <Empty>
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <TrophyIcon />
-                    </EmptyMedia>
-                    <EmptyTitle>No games found</EmptyTitle>
-                    <EmptyDescription>Try another search.</EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              )}
-              <Pager
-                page={gamePage}
-                count={filteredGames.length}
-                onPageChange={setGamePage}
+              <DataTable
+                columns={gameColumns}
+                data={games}
+                globalFilter={deferredGameSearch}
+                onGlobalFilterChange={setGameSearch}
+                pageSize={PAGE_SIZE}
+                rowClassName={() => "group/game-row"}
+                rowLabel={(game) => `View ${game.name}`}
+                onRowActivate={(game) => setSelectedGameId(game.id)}
+                empty={
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <TrophyIcon />
+                      </EmptyMedia>
+                      <EmptyTitle>No games found</EmptyTitle>
+                      <EmptyDescription>Try another search.</EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                }
               />
             </CardContent>
           </Card>

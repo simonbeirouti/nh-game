@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import {
   ArchiveIcon,
   ChevronDownIcon,
@@ -50,6 +51,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { gameKeys } from "@/lib/games/queries"
+
+type GameAction = (formData: FormData) => Promise<void>
 
 type OpenControl = "edit" | "start" | "archive" | "delete" | null
 
@@ -71,6 +75,16 @@ export function GameControls({
   className?: string
 }) {
   const [openControl, setOpenControl] = useState<OpenControl>(null)
+  const queryClient = useQueryClient()
+
+  async function runAction(action: GameAction, formData: FormData) {
+    await action(formData)
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: gameKeys.detail(gameId) }),
+      queryClient.invalidateQueries({ queryKey: gameKeys.catalogs() }),
+    ])
+    setOpenControl(null)
+  }
 
   return (
     <>
@@ -124,7 +138,10 @@ export function GameControls({
               Update the game details shown to participants.
             </DialogDescription>
           </DialogHeader>
-          <form action={updateGame} className="flex flex-col gap-4">
+          <form
+            action={(formData) => runAction(updateGame, formData)}
+            className="flex flex-col gap-4"
+          >
             <input type="hidden" name="gameId" value={gameId} />
             <FieldGroup>
               <Field>
@@ -187,7 +204,7 @@ export function GameControls({
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <form action={startGame}>
+              <form action={(formData) => runAction(startGame, formData)}>
                 <input type="hidden" name="gameId" value={gameId} />
                 <AlertDialogAction type="submit">
                   Generate bracket
@@ -212,7 +229,7 @@ export function GameControls({
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <form action={archiveGame}>
+              <form action={(formData) => runAction(archiveGame, formData)}>
                 <input type="hidden" name="gameId" value={gameId} />
                 <AlertDialogAction type="submit" variant="destructive">
                   Archive game
@@ -236,7 +253,7 @@ export function GameControls({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <form action={deleteGame}>
+            <form action={(formData) => runAction(deleteGame, formData)}>
               <input type="hidden" name="gameId" value={gameId} />
               <AlertDialogAction type="submit" variant="destructive">
                 Delete game
