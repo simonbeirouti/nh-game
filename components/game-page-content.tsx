@@ -1,5 +1,6 @@
 "use client"
 
+import { useSyncExternalStore } from "react"
 import Link from "next/link"
 import { ArrowLeftIcon, CrownIcon, Trash2Icon, UsersIcon } from "lucide-react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
@@ -34,6 +35,16 @@ import {
   gameKeys,
 } from "@/lib/games/queries"
 import type { GameDetail } from "@/lib/games/types"
+
+const subscribeToHydration = () => () => {}
+
+function useIsHydrated() {
+  return useSyncExternalStore(
+    subscribeToHydration,
+    () => true,
+    () => false
+  )
+}
 
 export function ReadOnlyParticipants({ game }: { game: GameDetail }) {
   if (!game.participants.length) {
@@ -138,6 +149,7 @@ export function GameDetailView({
   offline?: boolean
 }) {
   const online = useOnline()
+  const isHydrated = useIsHydrated()
   const interactive = online && !offline
   const invite = useQuery(
     gameInviteOptions(
@@ -185,7 +197,7 @@ export function GameDetailView({
         </h1>
         <GameStatusBadge status={game.status} />
         <div className="grid w-full auto-cols-fr grid-flow-col gap-2 md:ml-auto md:flex md:w-auto md:items-center">
-          {invite.data ? (
+          {isHydrated && invite.data ? (
             <CopyInviteButton
               className="w-full md:w-auto"
               url={invite.data.inviteUrl}
