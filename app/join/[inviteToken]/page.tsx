@@ -4,11 +4,7 @@ import { notFound } from "next/navigation"
 import { TriangleAlertIcon, TrophyIcon, UsersIcon } from "lucide-react"
 
 import { joinAuthenticatedGame } from "@/app/actions/auth"
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@/components/ui/alert"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,28 +15,43 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { getCurrentUser } from "@/lib/auth"
-import { createAdminClient } from "@/lib/supabase/admin"
+import { loadInvitedGame } from "@/lib/games/invite"
 
-export const metadata: Metadata = { title: "Join a game" }
+type JoinGamePageProps = {
+  params: Promise<{ inviteToken: string }>
+  searchParams: Promise<{ error?: string }>
+}
+
+function inviteDescription(name: string, description: string | null) {
+  return description || `You have been invited to join ${name} on CoLabs Games.`
+}
+
+export async function generateMetadata({
+  params,
+}: JoinGamePageProps): Promise<Metadata> {
+  const { inviteToken } = await params
+  const game = await loadInvitedGame(inviteToken)
+  if (!game) return { title: "Join a game" }
+
+  const title = `Join ${game.name}`
+  const description = inviteDescription(game.name, game.description)
+
+  return {
+    title,
+    description,
+    openGraph: { title, description, type: "website" },
+    twitter: { card: "summary_large_image", title, description },
+  }
+}
 
 export default async function JoinGamePage({
   params,
   searchParams,
-}: {
-  params: Promise<{ inviteToken: string }>
-  searchParams: Promise<{ error?: string }>
-}) {
+}: JoinGamePageProps) {
   const { inviteToken } = await params
   const { error: queryError } = await searchParams
-  const admin = createAdminClient()
-  const [{ data: game }, user] = await Promise.all([
-    admin
-      .from("games")
-      .select(
-        "id,name,description,status,max_participants,game_participants(count)"
-      )
-      .eq("invite_token", inviteToken)
-      .maybeSingle(),
+  const [game, user] = await Promise.all([
+    loadInvitedGame(inviteToken),
     getCurrentUser(),
   ])
   if (!game) notFound()

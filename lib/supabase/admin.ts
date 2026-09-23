@@ -8,8 +8,8 @@ export function createAdminClient() {
   return createClient(supabaseUrl(), supabaseServiceRoleKey(), {
     auth: {
       autoRefreshToken: false,
+      detectSessionInUrl: false,
       persistSession: false,
     },
   })
 }
-

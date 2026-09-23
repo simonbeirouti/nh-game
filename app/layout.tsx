@@ -6,6 +6,7 @@ import { ServiceWorkerRegistration } from "@/components/service-worker-registrat
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toast"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { appUrl } from "@/lib/env"
 
 const themeScript = `
   (() => {
@@ -28,15 +29,40 @@ const themeScript = `
 `
 
 export const metadata: Metadata = {
+  metadataBase: new URL(appUrl()),
   title: { default: "CoLabs Games", template: "%s · CoLabs Games" },
-  description: "Private, trustworthy coworker tournaments.",
+  description:
+    "Create private games, invite your group, and run fair tournaments from start to finish.",
   applicationName: "CoLabs Games",
+  category: "games",
+  manifest: "/manifest.webmanifest",
+  formatDetection: { telephone: false },
   appleWebApp: {
     capable: true,
     title: "CoLabs Games",
     statusBarStyle: "default",
   },
-  icons: { apple: "/apple-touch-icon.svg" },
+  icons: {
+    icon: [
+      { url: "/icon-192.svg", sizes: "192x192", type: "image/svg+xml" },
+      { url: "/icon-512.svg", sizes: "512x512", type: "image/svg+xml" },
+    ],
+    shortcut: [
+      { url: "/icon-192.svg", sizes: "192x192", type: "image/svg+xml" },
+    ],
+    apple: [{ url: "/icon-192.svg", sizes: "192x192", type: "image/svg+xml" }],
+  },
+  openGraph: {
+    type: "website",
+    siteName: "CoLabs Games",
+    title: "CoLabs Games",
+    description: "Friendly tournaments, without the admin.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CoLabs Games",
+    description: "Friendly tournaments, without the admin.",
+  },
 }
 
 export default function RootLayout({

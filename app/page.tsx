@@ -1,7 +1,8 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { ArrowRightIcon, TrophyIcon, UsersIcon } from "lucide-react"
+import { ArrowRightIcon, UsersIcon } from "lucide-react"
 
+import { BrandLogo } from "@/components/brand-logo"
 import { Badge } from "@/components/ui/badge"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
@@ -57,12 +58,10 @@ export default async function HomePage() {
         >
           <Link
             href="/"
-            className="flex items-center gap-2 font-semibold tracking-tight"
+            aria-label="CoLabs Games"
+            className="rounded-md text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           >
-            <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <TrophyIcon aria-hidden="true" />
-            </span>
-            CoLabs Games
+            <BrandLogo />
           </Link>
 
           <div className="flex items-center gap-1">
