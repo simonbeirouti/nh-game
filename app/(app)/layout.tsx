@@ -16,22 +16,19 @@ export default async function AuthenticatedLayout({
   const user = viewer.user
 
   const supabase = await createClient()
-  const [{ data: profile }, { data: game }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("full_name,avatar_url")
-      .eq("id", user.id)
-      .maybeSingle(),
-    supabase.from("games").select("id").limit(1).maybeSingle(),
-  ])
+  const { data: game } = await supabase
+    .from("games")
+    .select("id")
+    .limit(1)
+    .maybeSingle()
 
   return (
     <QueryProvider userId={user.id}>
       <AppShell
         userId={user.id}
-        userName={profile?.full_name ?? email.split("@")[0]}
+        userName={viewer.displayName}
         email={email}
-        avatarUrl={profile?.avatar_url ?? null}
+        avatarUrl={viewer.avatarUrl}
         canEnableNotifications={Boolean(game)}
         isAdmin={viewer.isAdmin}
       >

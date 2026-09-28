@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import {
   dehydrate,
   HydrationBoundary,
@@ -7,6 +7,8 @@ import {
 } from "@tanstack/react-query"
 
 import { GamePageContent } from "@/components/game-page-content"
+import { getCurrentViewer } from "@/lib/auth"
+import { onboardingPath } from "@/lib/auth-redirect"
 import { gameKeys } from "@/lib/games/queries"
 import { loadGameDetail } from "@/lib/games/server"
 
@@ -21,6 +23,10 @@ export default async function GamePage({
 }) {
   const { gameId } = await params
   const { joined } = await searchParams
+  const viewer = await getCurrentViewer()
+  if (viewer && !viewer.onboardingComplete) {
+    redirect(onboardingPath(`/games/${gameId}`))
+  }
   const game = await loadGameDetail(gameId)
   if (!game) notFound()
 

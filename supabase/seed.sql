@@ -1,5 +1,6 @@
 -- Deterministic local development fixtures.
 -- Loaded automatically after migrations by `supabase db reset --local`.
+-- Every seeded account uses the local-only password 123qweQ!.
 
 with seed_users as (
   select
@@ -42,7 +43,7 @@ select
   'authenticated',
   'authenticated',
   email,
-  '',
+  extensions.crypt('123qweQ!', extensions.gen_salt('bf')),
   now(),
   '',
   '',

@@ -1,8 +1,16 @@
 import type { EmailOtpType } from "@supabase/supabase-js"
 import { NextResponse, type NextRequest } from "next/server"
 
-import { bootstrapFirstAdmin, ensureUserProfile } from "@/lib/auth"
-import { inviteTokenFromPath, safeNextPath } from "@/lib/auth-redirect"
+import {
+  bootstrapFirstAdmin,
+  ensureUserProfile,
+  isOnboardingComplete,
+} from "@/lib/auth"
+import {
+  inviteTokenFromPath,
+  onboardingPath,
+  safeNextPath,
+} from "@/lib/auth-redirect"
 import { appUrl } from "@/lib/env"
 import { joinGameForUser } from "@/lib/game-join"
 import { resolveAppOrigin } from "@/lib/request-origin"
@@ -76,12 +84,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(errorDestination(origin, next, "missing-user"))
   }
 
+  let onboardingComplete: boolean
   try {
     await ensureUserProfile(user)
     await bootstrapFirstAdmin(user)
+    onboardingComplete = await isOnboardingComplete(user)
   } catch {
     await supabase.auth.signOut()
     return NextResponse.redirect(errorDestination(origin, next, "setup-failed"))
+  }
+
+  if (!onboardingComplete) {
+    return NextResponse.redirect(new URL(onboardingPath(next), origin))
   }
 
   if (inviteToken) {

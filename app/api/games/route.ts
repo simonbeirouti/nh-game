@@ -6,10 +6,18 @@ const privateHeaders = {
 }
 
 export async function GET() {
-  if (!(await getCurrentViewer())) {
+  const viewer = await getCurrentViewer()
+  if (!viewer) {
     return Response.json(
       { error: "Authentication is required" },
       { status: 401, headers: privateHeaders }
+    )
+  }
+
+  if (!viewer.onboardingComplete) {
+    return Response.json(
+      { error: "Complete your profile to view games" },
+      { status: 403, headers: privateHeaders }
     )
   }
 

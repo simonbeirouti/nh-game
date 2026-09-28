@@ -8,6 +8,7 @@ import {
   signUpWithPassword,
 } from "@/app/actions/auth"
 import { ActionFeedback, ToastNotification } from "@/components/action-feedback"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   Field,
@@ -194,6 +195,18 @@ function SignInForm({
 function SignUpForm({ action, next, pending, state }: AuthFormProps) {
   const fieldErrors = state.ok ? undefined : state.fieldErrors
 
+  if (state.ok) {
+    return (
+      <Alert className="px-4 py-4">
+        <AlertTitle>Check your email</AlertTitle>
+        <AlertDescription>
+          Open the confirmation link we sent you. You’ll then choose the name
+          people see in games and brackets, and you can add a profile photo.
+        </AlertDescription>
+      </Alert>
+    )
+  }
+
   return (
     <form action={action}>
       <input type="hidden" name="next" value={next} />
@@ -240,11 +253,7 @@ function SignUpForm({ action, next, pending, state }: AuthFormProps) {
           />
           <FieldError>{fieldErrors?.confirmPassword?.[0]}</FieldError>
         </Field>
-        <ActionFeedback
-          state={state}
-          successTitle="Account created"
-          errorTitle="Could not create account"
-        />
+        <ActionFeedback state={state} errorTitle="Could not create account" />
         <Field>
           <Button type="submit" disabled={pending}>
             {pending ? <Spinner data-icon="inline-start" /> : null}

@@ -17,6 +17,7 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { useQueryClient } from "@tanstack/react-query"
+import { cn } from "cn"
 import {
   useCallback,
   useLayoutEffect,
@@ -123,6 +124,7 @@ function ParticipantSlot({
   currentUserId,
   draggable,
   canManage,
+  preview,
   pending,
   run,
 }: {
@@ -135,6 +137,7 @@ function ParticipantSlot({
   currentUserId: string
   draggable: boolean
   canManage: boolean
+  preview: boolean
   pending: boolean
   run: (action: BracketAction, formData: FormData, done?: () => void) => void
 }) {
@@ -147,6 +150,12 @@ function ParticipantSlot({
     participantIndex === 0 ? match.participantBId : match.participantAId
   const score =
     participantIndex === 0 ? match.participantAScore : match.participantBScore
+  const decided =
+    !preview &&
+    Boolean(match.winnerId) &&
+    (match.status === "complete" || match.status === "bye")
+  const won = decided && match.winnerId === participantId
+  const eliminated = decided && match.status === "complete" && !won
   const sortableId = `${match.id}:${participantId}`
   const {
     attributes,
@@ -197,7 +206,11 @@ function ParticipantSlot({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex min-h-10 items-center gap-1.5 rounded-lg border bg-background px-1.5 py-1.5"
+      className={cn(
+        "flex min-h-10 items-center gap-1.5 rounded-lg border bg-background px-1.5 py-1.5",
+        won && "border-success/50 bg-success/30 text-success-foreground",
+        eliminated && "border-warning/50 bg-warning/25 text-warning-foreground"
+      )}
     >
       {draggable ? (
         <Button
@@ -224,8 +237,20 @@ function ParticipantSlot({
       {score != null ? (
         <span className="font-mono font-medium">{score}</span>
       ) : null}
-      {match.status === "complete" && match.winnerId === participantId ? (
-        <Badge>Winner</Badge>
+      {won ? (
+        <Badge
+          variant="outline"
+          className="border-success/50 bg-success/40 text-success-foreground"
+        >
+          {match.status === "bye" ? "Advanced" : "Winner"}
+        </Badge>
+      ) : eliminated ? (
+        <Badge
+          variant="outline"
+          className="border-warning/50 bg-warning/35 text-warning-foreground"
+        >
+          Out
+        </Badge>
       ) : null}
       {canManage ? (
         <DropdownMenu>
@@ -384,8 +409,16 @@ export function Bracket({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   )
+  const totalRounds = Math.max(0, ...matches.map((match) => match.round))
+  const visibleMatches = matches.filter(
+    (match) =>
+      match.round === 1 ||
+      match.participantAId ||
+      match.participantBId ||
+      match.winnerId
+  )
   const roundNumbers = [
-    ...new Set(matches.map((match) => match.round)),
+    ...new Set(visibleMatches.map((match) => match.round)),
   ].toSorted((a, b) => a - b)
   const resultsStarted = matches.some((match) => match.status === "complete")
   const openingSlots = matches
@@ -514,7 +547,7 @@ export function Bracket({
         <SortableContext items={openingSlots} strategy={rectSortingStrategy}>
           <div
             ref={bracketRef}
-            className="relative flex min-h-[32rem] w-full min-w-max items-stretch justify-between gap-16 pr-4 md:min-h-full"
+            className="relative flex min-h-[32rem] w-full min-w-max items-stretch justify-between gap-16 px-4 md:min-h-full"
           >
             <svg
               aria-hidden="true"
@@ -557,10 +590,10 @@ export function Bracket({
                   id={`round-${round}`}
                   className="text-sm font-medium text-muted-foreground"
                 >
-                  {roundName(round, roundNumbers.length)}
+                  {roundName(round, totalRounds)}
                 </h3>
                 <div className="flex flex-1 flex-col justify-around gap-4">
-                  {matches
+                  {visibleMatches
                     .filter((match) => match.round === round)
                     .toSorted((a, b) => a.slot - b.slot)
                     .map((match) => (
@@ -601,6 +634,7 @@ export function Bracket({
                                       !resultsStarted
                                     }
                                     canManage={canManage}
+                                    preview={preview}
                                     pending={pending}
                                     run={run}
                                   />

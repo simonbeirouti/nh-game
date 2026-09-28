@@ -1,12 +1,24 @@
 "use client"
 
-import { useSyncExternalStore } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
 import Link from "next/link"
-import { ArrowLeftIcon, CrownIcon, Trash2Icon, UsersIcon } from "lucide-react"
+import {
+  ArrowLeftIcon,
+  CircleCheckIcon,
+  CrownIcon,
+  Trash2Icon,
+  UsersIcon,
+  XIcon,
+} from "lucide-react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { leaveOrRemoveParticipant } from "@/app/actions/games"
-import { ToastNotification } from "@/components/action-feedback"
+import {
+  Alert,
+  AlertAction,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert"
 import { Bracket } from "@/components/bracket"
 import { CopyInviteButton } from "@/components/copy-invite-button"
 import { GameControls } from "@/components/game-controls"
@@ -150,6 +162,15 @@ export function GameDetailView({
 }) {
   const online = useOnline()
   const isHydrated = useIsHydrated()
+  const [showJoinWelcome, setShowJoinWelcome] = useState(joined)
+
+  useEffect(() => {
+    if (!joined) return
+    const url = new URL(window.location.href)
+    url.searchParams.delete("joined")
+    window.history.replaceState(window.history.state, "", url)
+  }, [joined, game.id])
+
   const interactive = online && !offline
   const invite = useQuery(
     gameInviteOptions(
@@ -169,15 +190,38 @@ export function GameDetailView({
       participant.avatarUrl,
     ])
   )
+  const currentPlayer = game.participants.find(
+    (participant) => participant.id === game.currentUserId
+  )
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 py-6 md:h-[calc(100svh-3.5rem)] md:overflow-hidden md:px-8 md:py-8 lg:px-12">
-      {joined ? (
-        <ToastNotification
-          title="Game joined"
-          description="You have been added to the tournament."
-          type="success"
-        />
+      {showJoinWelcome && currentPlayer ? (
+        <Alert
+          role="status"
+          aria-live="polite"
+          className="border-primary/25 bg-primary/5 px-4 py-4 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-2"
+        >
+          <CircleCheckIcon aria-hidden="true" />
+          <AlertTitle>You’re in, {currentPlayer.fullName}!</AlertTitle>
+          <AlertDescription>
+            You’ve joined {game.name}. Your name is in the player list.
+            {game.status === "drafted" || game.status === "completed"
+              ? " Find your position in the bracket below."
+              : " Your bracket position will appear when the draw starts."}
+          </AlertDescription>
+          <AlertAction>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Dismiss welcome message"
+              onClick={() => setShowJoinWelcome(false)}
+            >
+              <XIcon />
+            </Button>
+          </AlertAction>
+        </Alert>
       ) : null}
       <header className="flex flex-wrap items-center gap-3">
         <Link
@@ -285,5 +329,5 @@ export function GamePageContent({
       </main>
     )
   }
-  return <GameDetailView game={data} joined={joined} />
+  return <GameDetailView key={gameId} game={data} joined={joined} />
 }

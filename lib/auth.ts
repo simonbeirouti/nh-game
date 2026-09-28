@@ -23,20 +23,48 @@ export const getCurrentViewer = cache(async () => {
 
   await ensureUserProfile(user)
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .maybeSingle()
+  const [{ data, error }, { data: profile, error: profileError }] =
+    await Promise.all([
+      admin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      admin
+        .from("profiles")
+        .select("full_name,avatar_url,onboarding_completed_at")
+        .eq("id", user.id)
+        .single(),
+    ])
   if (error) throw new Error(error.message)
+  if (profileError) throw new Error(profileError.message)
 
   const role: AppRole = data?.role === "admin" ? "admin" : "user"
-  return { user, role, isAdmin: role === "admin" }
+  return {
+    user,
+    role,
+    isAdmin: role === "admin",
+    displayName: profile.full_name,
+    avatarUrl: profile.avatar_url,
+    onboardingComplete: Boolean(profile.onboarding_completed_at),
+  }
 })
+
+export async function isOnboardingComplete(user: User): Promise<boolean> {
+  await ensureUserProfile(user)
+  const { data, error } = await createAdminClient()
+    .from("profiles")
+    .select("onboarding_completed_at")
+    .eq("id", user.id)
+    .single()
+  if (error) throw new Error(error.message)
+  return Boolean(data.onboarding_completed_at)
+}
 
 export async function requireAdmin() {
   const viewer = await getCurrentViewer()
-  if (!viewer?.isAdmin) throw new Error("Administrator access is required")
+  if (!viewer?.isAdmin || !viewer.onboardingComplete)
+    throw new Error("Administrator access is required")
   return viewer
 }
 

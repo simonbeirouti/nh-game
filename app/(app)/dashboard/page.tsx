@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { redirect } from "next/navigation"
 import {
   dehydrate,
   HydrationBoundary,
@@ -7,6 +8,7 @@ import {
 
 import { DashboardGames } from "@/components/dashboard-games"
 import { getCurrentViewer } from "@/lib/auth"
+import { onboardingPath } from "@/lib/auth-redirect"
 import { gameKeys } from "@/lib/games/queries"
 import { loadGameCatalog } from "@/lib/games/server"
 
@@ -19,6 +21,7 @@ export default async function DashboardPage({
 }) {
   const { joinError, password } = await searchParams
   const viewer = (await getCurrentViewer())!
+  if (!viewer.onboardingComplete) redirect(onboardingPath("/dashboard"))
   const queryClient = new QueryClient()
   await queryClient.prefetchQuery({
     queryKey: gameKeys.catalog(viewer.user.id),

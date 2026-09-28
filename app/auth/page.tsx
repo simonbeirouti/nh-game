@@ -2,8 +2,8 @@ import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
 import { AuthLoginForm } from "@/components/auth-login-form"
-import { getCurrentUser } from "@/lib/auth"
-import { safeNextPath } from "@/lib/auth-redirect"
+import { getCurrentUser, isOnboardingComplete } from "@/lib/auth"
+import { onboardingPath, safeNextPath } from "@/lib/auth-redirect"
 
 export const metadata: Metadata = { title: "Sign in" }
 
@@ -23,13 +23,12 @@ export default async function LoginPage({
       ? mode
       : undefined
   const user = await getCurrentUser()
-  if (user) redirect(next)
+  if (user) {
+    if (!(await isOnboardingComplete(user))) redirect(onboardingPath(next))
+    redirect(next)
+  }
 
   return (
-    <AuthLoginForm
-      authError={error}
-      initialMode={initialMode}
-      next={next}
-    />
+    <AuthLoginForm authError={error} initialMode={initialMode} next={next} />
   )
 }

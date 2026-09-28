@@ -7,6 +7,7 @@ import { z } from "zod"
 
 import type { ActionState } from "@/lib/action-state"
 import { getCurrentViewer } from "@/lib/auth"
+import { onboardingPath } from "@/lib/auth-redirect"
 import { joinGameForUser } from "@/lib/game-join"
 import { sendPushToUsers } from "@/lib/push"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -64,6 +65,7 @@ function revalidateManagedGame(gameId: string) {
 async function requireViewer() {
   const viewer = await getCurrentViewer()
   if (!viewer?.user.email) redirect("/auth")
+  if (!viewer.onboardingComplete) redirect(onboardingPath("/dashboard"))
   return viewer
 }
 

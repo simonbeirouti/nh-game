@@ -5,8 +5,12 @@ import { redirect } from "next/navigation"
 import { z } from "zod"
 
 import type { ActionState } from "@/lib/action-state"
-import { safeNextPath } from "@/lib/auth-redirect"
-import { defaultDisplayName, getCurrentUser } from "@/lib/auth"
+import { onboardingPath, safeNextPath } from "@/lib/auth-redirect"
+import {
+  defaultDisplayName,
+  getCurrentUser,
+  isOnboardingComplete,
+} from "@/lib/auth"
 import { appUrl } from "@/lib/env"
 import { joinGameForUser } from "@/lib/game-join"
 import { sendPasswordRecoveryEmail } from "@/lib/password-recovery"
@@ -60,12 +64,16 @@ export async function signInWithPassword(
   if (!parsed.success) return errors(parsed.error)
 
   const supabase = await createClient()
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email: parsed.data.email,
     password: parsed.data.password,
   })
   if (error) return { ok: false, message: "Invalid email or password." }
-  redirect(safeNextPath(parsed.data.next))
+  const next = safeNextPath(parsed.data.next)
+  if (!data.user || !(await isOnboardingComplete(data.user))) {
+    redirect(onboardingPath(next))
+  }
+  redirect(next)
 }
 
 export async function signUpWithPassword(
@@ -100,11 +108,12 @@ export async function signUpWithPassword(
       message: "Could not create the account. Please check your details.",
     }
   }
-  if (data.session) redirect(next)
+  if (data.session) redirect(onboardingPath(next))
 
   return {
     ok: true,
-    message: "Check your email to confirm your account, then sign in.",
+    message:
+      "Check your email to confirm your account, then set up your profile.",
   }
 }
 
@@ -159,6 +168,9 @@ export async function joinAuthenticatedGame(formData: FormData) {
   const user = await getCurrentUser()
   if (!user?.email)
     redirect(`/auth?next=${encodeURIComponent(`/join/${inviteToken}`)}`)
+  if (!(await isOnboardingComplete(user))) {
+    redirect(onboardingPath(`/join/${inviteToken}`))
+  }
 
   let gameId: string
   try {

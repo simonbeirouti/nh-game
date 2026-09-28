@@ -8,9 +8,9 @@ import { useQuery } from "@tanstack/react-query"
 import { joinPublicGame } from "@/app/actions/games"
 import { ToastNotification } from "@/components/action-feedback"
 import { CreateGameOverlay } from "@/components/create-game-overlay"
+import { JoinGameForm } from "@/components/join-game-form"
 import { GameStatusBadge } from "@/components/game-status-badge"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import {
   Card,
   CardAction,
@@ -87,13 +87,14 @@ function GameGrid({
             </CardContent>
             {canJoin ? (
               <CardFooter>
-                <form action={joinPublicGame} className="w-full">
-                  <input type="hidden" name="gameId" value={game.id} />
-                  <Button type="submit" className="w-full" disabled={!online}>
-                    {online ? "Join game" : "Reconnect to join"}
-                    <ArrowRightIcon data-icon="inline-end" aria-hidden="true" />
-                  </Button>
-                </form>
+                <JoinGameForm
+                  action={joinPublicGame}
+                  fieldName="gameId"
+                  fieldValue={game.id}
+                  gameName={game.name}
+                  label={online ? "Join game" : "Reconnect to join"}
+                  disabled={!online}
+                />
               </CardFooter>
             ) : (
               <CardFooter className="justify-between text-sm font-medium">

@@ -13,6 +13,24 @@ export function safeNextPath(value: string | null | undefined): string {
   }
 }
 
+export function safeOnboardingNextPath(
+  value: string | null | undefined
+): string {
+  const next = safeNextPath(value)
+  const pathname = new URL(next, "https://colabs-games.invalid").pathname
+  if (pathname === "/onboarding" || pathname.startsWith("/onboarding/")) {
+    return "/dashboard"
+  }
+  if (pathname === "/auth" || pathname.startsWith("/auth/")) {
+    return "/dashboard"
+  }
+  return next
+}
+
+export function onboardingPath(next: string): string {
+  return `/onboarding?next=${encodeURIComponent(safeOnboardingNextPath(next))}`
+}
+
 export function inviteTokenFromPath(path: string): string | null {
   return path.match(INVITE_PATH)?.[1] ?? null
 }

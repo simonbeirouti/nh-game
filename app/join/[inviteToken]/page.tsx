@@ -1,9 +1,10 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { TriangleAlertIcon, TrophyIcon, UsersIcon } from "lucide-react"
 
 import { joinAuthenticatedGame } from "@/app/actions/auth"
+import { JoinGameForm } from "@/components/join-game-form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -14,7 +15,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { getCurrentUser } from "@/lib/auth"
+import { getCurrentViewer } from "@/lib/auth"
+import { onboardingPath } from "@/lib/auth-redirect"
 import { loadInvitedGame } from "@/lib/games/invite"
 
 type JoinGamePageProps = {
@@ -50,11 +52,15 @@ export default async function JoinGamePage({
 }: JoinGamePageProps) {
   const { inviteToken } = await params
   const { error: queryError } = await searchParams
-  const [game, user] = await Promise.all([
+  const [game, viewer] = await Promise.all([
     loadInvitedGame(inviteToken),
-    getCurrentUser(),
+    getCurrentViewer(),
   ])
   if (!game) notFound()
+
+  if (viewer && !viewer.onboardingComplete) {
+    redirect(onboardingPath(`/join/${inviteToken}`))
+  }
 
   const accepting = game.status === "open"
   const participantCount = game.game_participants?.[0]?.count ?? 0
@@ -94,13 +100,14 @@ export default async function JoinGamePage({
             <p className="text-sm text-muted-foreground">
               This game is no longer accepting participants.
             </p>
-          ) : user ? (
-            <form action={joinAuthenticatedGame}>
-              <input type="hidden" name="inviteToken" value={inviteToken} />
-              <Button type="submit" className="w-full">
-                Join as {user.email}
-              </Button>
-            </form>
+          ) : viewer ? (
+            <JoinGameForm
+              action={joinAuthenticatedGame}
+              fieldName="inviteToken"
+              fieldValue={inviteToken}
+              gameName={game.name}
+              label={`Join as ${viewer.displayName}`}
+            />
           ) : (
             <Button
               className="w-full"

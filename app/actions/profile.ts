@@ -1,6 +1,7 @@
 "use server"
 
 import { refresh } from "next/cache"
+import { redirect } from "next/navigation"
 import sharp from "sharp"
 import { z } from "zod"
 
@@ -11,12 +12,70 @@ import {
   MAX_AVATAR_SIZE,
   avatarObjectPath,
 } from "@/lib/avatar-storage"
-import { getCurrentUser } from "@/lib/auth"
+import { ensureUserProfile, getCurrentUser } from "@/lib/auth"
+import {
+  inviteTokenFromPath,
+  safeOnboardingNextPath,
+} from "@/lib/auth-redirect"
+import { joinGameForUser } from "@/lib/game-join"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 const profileSchema = z.object({
   fullName: z.string().trim().min(2).max(80),
 })
+
+export async function completeOnboarding(
+  _previous: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const user = await getCurrentUser()
+  const rawNext = formData.get("next")
+  const next = safeOnboardingNextPath(
+    typeof rawNext === "string" ? rawNext : null
+  )
+  if (!user?.email) {
+    redirect(`/auth?next=${encodeURIComponent(next)}`)
+  }
+
+  const parsed = profileSchema.safeParse({ fullName: formData.get("fullName") })
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: "Please enter a name between 2 and 80 characters.",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    }
+  }
+
+  await ensureUserProfile(user)
+  const { error } = await createAdminClient()
+    .from("profiles")
+    .update({
+      full_name: parsed.data.fullName,
+      onboarding_completed_at: new Date().toISOString(),
+    })
+    .eq("id", user.id)
+    .select("id")
+    .single()
+  if (error) return { ok: false, message: error.message }
+
+  const inviteToken = inviteTokenFromPath(
+    new URL(next, "https://colabs-games.invalid").pathname
+  )
+  if (inviteToken) {
+    let destination: string
+    try {
+      const gameId = await joinGameForUser(user, inviteToken)
+      destination = `/games/${gameId}?joined=1`
+    } catch (joinError) {
+      const message =
+        joinError instanceof Error ? joinError.message : "Could not join game"
+      destination = `/join/${inviteToken}?error=${encodeURIComponent(message)}`
+    }
+    redirect(destination)
+  }
+
+  redirect(next)
+}
 
 export async function updateProfile(
   _previous: ActionState,

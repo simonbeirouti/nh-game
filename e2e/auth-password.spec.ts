@@ -74,7 +74,8 @@ async function resetPassword(
   page: Page,
   request: APIRequestContext,
   email: string,
-  password: string
+  password: string,
+  destination: "dashboard" | "onboarding" = "dashboard"
 ) {
   const existingIds = await mailIds(request)
   await page.getByRole("button", { name: "Forgot your password?" }).click()
@@ -92,7 +93,21 @@ async function resetPassword(
   await page.getByLabel("New password").fill(password)
   await page.getByLabel("Confirm password").fill(password)
   await page.getByRole("button", { name: "Update password" }).click()
-  await expect(page).toHaveURL(/\/dashboard\?password=updated$/)
+  await expect(page).toHaveURL(
+    destination === "dashboard"
+      ? /\/dashboard\?password=updated$/
+      : /\/onboarding\?next=/
+  )
+}
+
+async function completeOnboarding(page: Page, name: string, invited = false) {
+  await expect(page).toHaveURL(/\/onboarding\?next=/)
+  await page.getByRole("textbox", { name: "Display name" }).fill(name)
+  await page
+    .getByRole("button", {
+      name: invited ? "Save and join game" : "Continue to games",
+    })
+    .click()
 }
 
 async function signOut(page: Page) {
@@ -115,8 +130,9 @@ test("password auth, invitations, and database roles work together", async ({
 
   const suffix = Date.now()
   const ownerEmail = `owner-${suffix}@example.com`
+  const ownerName = `Owner ${suffix}`
   const invitedEmail = `invited-${suffix}@example.com`
-  const invitedName = `invited ${suffix}`
+  const invitedName = `Invited Player ${suffix}`
   const adminAddress =
     process.env.ADMIN_EMAIL?.toLowerCase() ?? "hello@simonbeirouti.com"
   const gameName = `E2E central auth ${suffix}`
@@ -127,15 +143,27 @@ test("password auth, invitations, and database roles work together", async ({
   // New account creation rejects open redirects.
   await page.goto("/auth?next=https%3A%2F%2Fexample.com%2Fsteal")
   await signUpWithPassword(page, ownerEmail, ownerPassword)
+  await expect(page).toHaveURL(/\/onboarding\?next=%2Fdashboard$/)
+  await page
+    .locator('input[type="file"][name="avatar"]')
+    .setInputFiles("public/nh.jpg")
+  await expect(
+    page.getByRole("button", { name: "Replace profile image" })
+  ).toBeVisible()
+  await completeOnboarding(page, ownerName)
   await expect(page).toHaveURL(/\/dashboard$/)
   await expect(page.getByRole("heading", { name: "Games" })).toBeVisible()
   await expect(
     page.getByRole("button", { name: "Create a game" })
   ).toBeVisible()
   await page.getByLabel("Open profile and notifications").click()
-  await expect(page.getByRole("dialog").getByLabel("Email")).toHaveValue(
-    ownerEmail
+  await expect(page.getByRole("dialog").getByText(ownerEmail)).toBeVisible()
+  await expect(page.getByRole("dialog").getByLabel("Name")).toHaveValue(
+    ownerName
   )
+  await expect(
+    page.getByRole("dialog").locator('img[src*="/avatars/"]')
+  ).toHaveCount(1)
   await page.getByRole("button", { name: "Close" }).click()
 
   // Existing users use the same page and return to the dashboard.
@@ -162,6 +190,7 @@ test("password auth, invitations, and database roles work together", async ({
   await page.getByRole("button", { name: "Create a game" }).click()
   const createDialog = page.getByRole("dialog", { name: "Create a game" })
   await createDialog.getByLabel("Game name").fill(gameName)
+  await createDialog.getByLabel("Participant limit").fill("2")
   await createDialog.getByRole("button", { name: "Create game" }).click()
   await expect(page).toHaveURL(/\/games\/[0-9a-f-]+$/)
   await expect(page.getByRole("button", { name: "Actions" })).toBeVisible()
@@ -186,20 +215,38 @@ test("password auth, invitations, and database roles work together", async ({
     )
   ).toBeVisible()
 
-  // New invited user: invite -> central login -> automatic join.
+  // New invited user: invite -> central login -> onboarding -> automatic join.
   await invitedPage.goto(inviteUrl)
   await invitedPage.getByRole("button", { name: "Sign in to join" }).click()
   await expect(invitedPage).toHaveURL(/\/auth\?next=/)
   await signUpWithPassword(invitedPage, invitedEmail, invitedPassword)
-  await expect(invitedPage).toHaveURL(new RegExp(`${invitePath}$`))
-  await invitedPage
-    .getByRole("button", { name: `Join as ${invitedEmail}` })
-    .click()
-  await expect(invitedPage).toHaveURL(/\/games\/[0-9a-f-]+\?joined=1$/)
-  await expect(invitedPage.getByText(/ \(you\)$/)).toBeVisible()
+
+  // Another player opens the invitation while the last spot is available.
+  const fullContext = await browser.newContext()
+  const fullPage = await fullContext.newPage()
+  await fullPage.goto(inviteUrl)
+  await fullPage.getByRole("button", { name: "Sign in to join" }).click()
+
+  await completeOnboarding(invitedPage, invitedName, true)
+  await expect(invitedPage).toHaveURL(/\/games\/[0-9a-f-]+$/)
+  await expect(
+    invitedPage.getByText(`You’re in, ${invitedName}!`)
+  ).toBeVisible()
+  await expect(invitedPage.getByText(`${invitedName} (you)`)).toBeVisible()
   await expect(
     invitedPage.getByRole("button", { name: "Actions" })
   ).toHaveCount(0)
+
+  // A full game keeps the completed profile and explains why joining failed.
+  await signUpWithPassword(
+    fullPage,
+    `full-${suffix}@example.com`,
+    "full-password-123"
+  )
+  await completeOnboarding(fullPage, `Full Player ${suffix}`, true)
+  await expect(fullPage).toHaveURL(/\/join\/[0-9a-f-]+\?error=/)
+  await expect(fullPage.getByText("Could not join game")).toBeVisible()
+  await fullContext.close()
 
   // Members can leave while the game is open, lose ordinary URL access, and
   // rejoin from the same private invitation.
@@ -211,11 +258,49 @@ test("password auth, invitations, and database roles work together", async ({
   await expect(invitedPage).toHaveURL(/\/dashboard$/)
   const leftGameResponse = await invitedPage.goto(gamePath)
   expect(leftGameResponse?.status()).toBe(404)
-  await invitedPage.goto(inviteUrl)
+  // Dashboard joins show progress and the same welcome state.
+  await invitedPage.goto("/dashboard")
+  await invitedPage.route("**/dashboard", async (route) => {
+    if (route.request().method() === "POST") {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    }
+    await route.continue()
+  })
   await invitedPage
-    .getByRole("button", { name: `Join as ${invitedEmail}` })
+    .locator('[data-slot="card"]')
+    .filter({ hasText: gameName })
+    .getByRole("button", { name: "Join game" })
     .click()
-  await expect(invitedPage).toHaveURL(/\/games\/[0-9a-f-]+\?joined=1$/)
+  await expect(
+    invitedPage.getByText(`Adding you to ${gameName}…`)
+  ).toBeVisible()
+  await expect(invitedPage).toHaveURL(/\/games\/[0-9a-f-]+$/)
+  await expect(
+    invitedPage.getByText(`You’re in, ${invitedName}!`)
+  ).toBeVisible()
+  await invitedPage.unroute("**/dashboard")
+
+  await invitedPage.getByRole("button", { name: /View \d+ players/ }).click()
+  await invitedPage
+    .getByRole("button", { name: `Remove ${invitedName}` })
+    .click()
+  await expect(invitedPage).toHaveURL(/\/dashboard$/)
+
+  await invitedPage.goto(inviteUrl)
+  await invitedPage.route("**/join/**", async (route) => {
+    if (route.request().method() === "POST") {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    }
+    await route.continue()
+  })
+  await invitedPage
+    .getByRole("button", { name: `Join as ${invitedName}` })
+    .click()
+  await expect(
+    invitedPage.getByText(`Adding you to ${gameName}…`)
+  ).toBeVisible()
+  await expect(invitedPage).toHaveURL(/\/games\/[0-9a-f-]+$/)
+  await invitedPage.unroute("**/join/**")
 
   // Existing signed-out invited user follows the same resumable flow.
   await signOut(invitedPage)
@@ -224,16 +309,16 @@ test("password auth, invitations, and database roles work together", async ({
   await signInWithPassword(invitedPage, invitedEmail, invitedPassword)
   await expect(invitedPage).toHaveURL(new RegExp(`${invitePath}$`))
   await invitedPage
-    .getByRole("button", { name: `Join as ${invitedEmail}` })
+    .getByRole("button", { name: `Join as ${invitedName}` })
     .click()
-  await expect(invitedPage).toHaveURL(/\/games\/[0-9a-f-]+\?joined=1$/)
+  await expect(invitedPage).toHaveURL(/\/games\/[0-9a-f-]+$/)
 
   // Existing signed-in user can join directly without another login.
   await invitedPage.goto(inviteUrl)
   await invitedPage
-    .getByRole("button", { name: `Join as ${invitedEmail}` })
+    .getByRole("button", { name: `Join as ${invitedName}` })
     .click()
-  await expect(invitedPage).toHaveURL(/\/games\/[0-9a-f-]+\?joined=1$/)
+  await expect(invitedPage).toHaveURL(/\/games\/[0-9a-f-]+$/)
   await invitedContext.close()
 
   // ADMIN_EMAIL bootstraps the first database role and can manage every game.
@@ -243,7 +328,16 @@ test("password auth, invitations, and database roles work together", async ({
   if (process.env.ADMIN_PASSWORD) {
     await signInWithPassword(adminPage, adminAddress, adminPassword)
   } else {
-    await resetPassword(adminPage, request, adminAddress, adminPassword)
+    await resetPassword(
+      adminPage,
+      request,
+      adminAddress,
+      adminPassword,
+      "onboarding"
+    )
+  }
+  if (new URL(adminPage.url()).pathname === "/onboarding") {
+    await completeOnboarding(adminPage, "Simon Beirouti")
   }
   await expect(adminPage).toHaveURL(/\/dashboard$/)
   await expect(adminPage.getByRole("button", { name: "Admin" })).toBeVisible()
